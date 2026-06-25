@@ -1,0 +1,815 @@
+{
+  "version": "1.0.0",
+  "blocks": {
+    "air": {
+      "id": 0,
+      "name": "Air",
+      "solid": false,
+      "transparent": true,
+      "hardness": 0,
+      "lightEmit": 0,
+      "color": {
+        "top": null,
+        "side": null,
+        "bottom": null
+      },
+      "drops": []
+    },
+    "grass_block": {
+      "id": 1,
+      "name": "Grass Block",
+      "solid": true,
+      "transparent": false,
+      "hardness": 0.6,
+      "lightEmit": 0,
+      "color": {
+        "top": "#5a9e3a",
+        "side": "#8B6343",
+        "bottom": "#8B6343"
+      },
+      "drops": [
+        "dirt"
+      ]
+    },
+    "dirt": {
+      "id": 2,
+      "name": "Dirt",
+      "solid": true,
+      "transparent": false,
+      "hardness": 0.5,
+      "lightEmit": 0,
+      "color": {
+        "top": "#8B6343",
+        "side": "#8B6343",
+        "bottom": "#8B6343"
+      },
+      "drops": [
+        "dirt"
+      ]
+    },
+    "stone": {
+      "id": 3,
+      "name": "Stone",
+      "solid": true,
+      "transparent": false,
+      "hardness": 1.5,
+      "lightEmit": 0,
+      "color": {
+        "top": "#8c8c8c",
+        "side": "#8c8c8c",
+        "bottom": "#8c8c8c"
+      },
+      "drops": [
+        "cobblestone"
+      ]
+    },
+    "cobblestone": {
+      "id": 4,
+      "name": "Cobblestone",
+      "solid": true,
+      "transparent": false,
+      "hardness": 2.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#7a7a7a",
+        "side": "#7a7a7a",
+        "bottom": "#7a7a7a"
+      },
+      "drops": [
+        "cobblestone"
+      ]
+    },
+    "oak_log": {
+      "id": 5,
+      "name": "Oak Log",
+      "solid": true,
+      "transparent": false,
+      "hardness": 2.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#c8a96a",
+        "side": "#7a5c2e",
+        "bottom": "#c8a96a"
+      },
+      "drops": [
+        "oak_log"
+      ]
+    },
+    "oak_planks": {
+      "id": 6,
+      "name": "Oak Planks",
+      "solid": true,
+      "transparent": false,
+      "hardness": 2.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#c8a96a",
+        "side": "#c8a96a",
+        "bottom": "#c8a96a"
+      },
+      "drops": [
+        "oak_planks"
+      ]
+    },
+    "oak_leaves": {
+      "id": 7,
+      "name": "Oak Leaves",
+      "solid": true,
+      "transparent": true,
+      "hardness": 0.2,
+      "lightEmit": 0,
+      "color": {
+        "top": "#3a8a28",
+        "side": "#3a8a28",
+        "bottom": "#3a8a28"
+      },
+      "drops": []
+    },
+    "sand": {
+      "id": 8,
+      "name": "Sand",
+      "solid": true,
+      "transparent": false,
+      "hardness": 0.5,
+      "lightEmit": 0,
+      "color": {
+        "top": "#ddd095",
+        "side": "#ddd095",
+        "bottom": "#ddd095"
+      },
+      "drops": [
+        "sand"
+      ]
+    },
+    "gravel": {
+      "id": 9,
+      "name": "Gravel",
+      "solid": true,
+      "transparent": false,
+      "hardness": 0.6,
+      "lightEmit": 0,
+      "color": {
+        "top": "#9b9b9b",
+        "side": "#9b9b9b",
+        "bottom": "#9b9b9b"
+      },
+      "drops": [
+        "gravel"
+      ]
+    },
+    "water": {
+      "id": 10,
+      "name": "Water",
+      "solid": false,
+      "transparent": true,
+      "hardness": 100,
+      "lightEmit": 0,
+      "color": {
+        "top": "#2980b9",
+        "side": "#2471a3",
+        "bottom": "#2471a3"
+      },
+      "drops": [],
+      "alpha": 0.75
+    },
+    "coal_ore": {
+      "id": 13,
+      "name": "Coal Ore",
+      "solid": true,
+      "transparent": false,
+      "hardness": 3.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#555555",
+        "side": "#555555",
+        "bottom": "#555555"
+      },
+      "drops": [
+        "coal"
+      ]
+    },
+    "iron_ore": {
+      "id": 14,
+      "name": "Iron Ore",
+      "solid": true,
+      "transparent": false,
+      "hardness": 3.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#a97c50",
+        "side": "#a97c50",
+        "bottom": "#a97c50"
+      },
+      "drops": [
+        "raw_iron"
+      ]
+    },
+    "gold_ore": {
+      "id": 15,
+      "name": "Gold Ore",
+      "solid": true,
+      "transparent": false,
+      "hardness": 3.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#d4ac0d",
+        "side": "#d4ac0d",
+        "bottom": "#d4ac0d"
+      },
+      "drops": [
+        "raw_gold"
+      ]
+    },
+    "diamond_ore": {
+      "id": 16,
+      "name": "Diamond Ore",
+      "solid": true,
+      "transparent": false,
+      "hardness": 5.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#5dade2",
+        "side": "#5dade2",
+        "bottom": "#5dade2"
+      },
+      "drops": [
+        "diamond"
+      ]
+    },
+    "emerald_ore": {
+      "id": 17,
+      "name": "Emerald Ore",
+      "solid": true,
+      "transparent": false,
+      "hardness": 3.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#2ecc71",
+        "side": "#2ecc71",
+        "bottom": "#2ecc71"
+      },
+      "drops": [
+        "emerald"
+      ]
+    },
+    "lapis_ore": {
+      "id": 19,
+      "name": "Lapis Lazuli Ore",
+      "solid": true,
+      "transparent": false,
+      "hardness": 3.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#154360",
+        "side": "#154360",
+        "bottom": "#154360"
+      },
+      "drops": [
+        "lapis_lazuli"
+      ]
+    },
+    "block_of_coal": {
+      "id": 20,
+      "name": "Block of Coal",
+      "solid": true,
+      "transparent": false,
+      "hardness": 5.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#1a1a1a",
+        "side": "#1a1a1a",
+        "bottom": "#1a1a1a"
+      },
+      "drops": [
+        "block_of_coal"
+      ]
+    },
+    "block_of_iron": {
+      "id": 21,
+      "name": "Block of Iron",
+      "solid": true,
+      "transparent": false,
+      "hardness": 5.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#d5d5d5",
+        "side": "#d5d5d5",
+        "bottom": "#d5d5d5"
+      },
+      "drops": [
+        "block_of_iron"
+      ]
+    },
+    "block_of_gold": {
+      "id": 22,
+      "name": "Block of Gold",
+      "solid": true,
+      "transparent": false,
+      "hardness": 3.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#f1c40f",
+        "side": "#d4ac0d",
+        "bottom": "#d4ac0d"
+      },
+      "drops": [
+        "block_of_gold"
+      ]
+    },
+    "block_of_diamond": {
+      "id": 23,
+      "name": "Block of Diamond",
+      "solid": true,
+      "transparent": false,
+      "hardness": 5.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#5dade2",
+        "side": "#4a9fc7",
+        "bottom": "#4a9fc7"
+      },
+      "drops": [
+        "block_of_diamond"
+      ]
+    },
+    "block_of_emerald": {
+      "id": 24,
+      "name": "Block of Emerald",
+      "solid": true,
+      "transparent": false,
+      "hardness": 5.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#2ecc71",
+        "side": "#27ae60",
+        "bottom": "#27ae60"
+      },
+      "drops": [
+        "block_of_emerald"
+      ]
+    },
+    "crafting_table": {
+      "id": 25,
+      "name": "Crafting Table",
+      "solid": true,
+      "transparent": false,
+      "hardness": 2.5,
+      "lightEmit": 0,
+      "color": {
+        "top": "#8B5E3C",
+        "side": "#6b3d1e",
+        "bottom": "#6b3d1e"
+      },
+      "drops": [
+        "crafting_table"
+      ]
+    },
+    "furnace": {
+      "id": 26,
+      "name": "Furnace",
+      "solid": true,
+      "transparent": false,
+      "hardness": 3.5,
+      "lightEmit": 0,
+      "color": {
+        "top": "#707070",
+        "side": "#606060",
+        "bottom": "#606060"
+      },
+      "drops": [
+        "furnace"
+      ]
+    },
+    "chest": {
+      "id": 27,
+      "name": "Chest",
+      "solid": true,
+      "transparent": false,
+      "hardness": 2.5,
+      "lightEmit": 0,
+      "color": {
+        "top": "#c8a96a",
+        "side": "#a07840",
+        "bottom": "#a07840"
+      },
+      "drops": [
+        "chest"
+      ]
+    },
+    "glass": {
+      "id": 29,
+      "name": "Glass",
+      "solid": true,
+      "transparent": true,
+      "hardness": 0.3,
+      "lightEmit": 0,
+      "color": {
+        "top": "#a8d8ea",
+        "side": "#a8d8ea",
+        "bottom": "#a8d8ea"
+      },
+      "drops": [],
+      "alpha": 0.4
+    },
+    "snow_block": {
+      "id": 32,
+      "name": "Snow Block",
+      "solid": true,
+      "transparent": false,
+      "hardness": 0.2,
+      "lightEmit": 0,
+      "color": {
+        "top": "#f0f4f8",
+        "side": "#e8ecef",
+        "bottom": "#dde1e5"
+      },
+      "drops": [
+        "snowball"
+      ]
+    },
+    "pumpkin": {
+      "id": 34,
+      "name": "Pumpkin",
+      "solid": true,
+      "transparent": false,
+      "hardness": 1.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#e67e22",
+        "side": "#d35400",
+        "bottom": "#d35400"
+      },
+      "drops": [
+        "pumpkin"
+      ]
+    },
+    "melon": {
+      "id": 35,
+      "name": "Melon",
+      "solid": true,
+      "transparent": false,
+      "hardness": 1.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#27ae60",
+        "side": "#1e8449",
+        "bottom": "#1e8449"
+      },
+      "drops": [
+        "melon_slice"
+      ]
+    },
+    "bricks": {
+      "id": 36,
+      "name": "Bricks",
+      "solid": true,
+      "transparent": false,
+      "hardness": 2.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#8b3a3a",
+        "side": "#8b3a3a",
+        "bottom": "#8b3a3a"
+      },
+      "drops": [
+        "brick"
+      ]
+    },
+    "stone_bricks": {
+      "id": 37,
+      "name": "Stone Bricks",
+      "solid": true,
+      "transparent": false,
+      "hardness": 1.5,
+      "lightEmit": 0,
+      "color": {
+        "top": "#7a7a7a",
+        "side": "#6a6a6a",
+        "bottom": "#6a6a6a"
+      },
+      "drops": [
+        "stone_bricks"
+      ]
+    },
+    "mossy_cobblestone": {
+      "id": 38,
+      "name": "Mossy Cobblestone",
+      "solid": true,
+      "transparent": false,
+      "hardness": 2.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#5a7a4a",
+        "side": "#4a6a3a",
+        "bottom": "#4a6a3a"
+      },
+      "drops": [
+        "mossy_cobblestone"
+      ]
+    },
+    "bookshelf": {
+      "id": 39,
+      "name": "Bookshelf",
+      "solid": true,
+      "transparent": false,
+      "hardness": 1.5,
+      "lightEmit": 0,
+      "color": {
+        "top": "#c8a96a",
+        "side": "#8b4513",
+        "bottom": "#c8a96a"
+      },
+      "drops": [
+        "oak_planks"
+      ]
+    },
+    "clay": {
+      "id": 44,
+      "name": "Clay",
+      "solid": true,
+      "transparent": false,
+      "hardness": 0.6,
+      "lightEmit": 0,
+      "color": {
+        "top": "#9daab3",
+        "side": "#9daab3",
+        "bottom": "#9daab3"
+      },
+      "drops": [
+        "clay_ball"
+      ]
+    },
+    "podzol": {
+      "id": 46,
+      "name": "Podzol",
+      "solid": true,
+      "transparent": false,
+      "hardness": 0.5,
+      "lightEmit": 0,
+      "color": {
+        "top": "#4a3220",
+        "side": "#8B6343",
+        "bottom": "#8B6343"
+      },
+      "drops": [
+        "dirt"
+      ]
+    },
+    "coarse_dirt": {
+      "id": 47,
+      "name": "Coarse Dirt",
+      "solid": true,
+      "transparent": false,
+      "hardness": 0.5,
+      "lightEmit": 0,
+      "color": {
+        "top": "#6b4c32",
+        "side": "#6b4c32",
+        "bottom": "#6b4c32"
+      },
+      "drops": [
+        "coarse_dirt"
+      ]
+    },
+    "spruce_log": {
+      "id": 48,
+      "name": "Spruce Log",
+      "solid": true,
+      "transparent": false,
+      "hardness": 2.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#c8a96a",
+        "side": "#4a3220",
+        "bottom": "#c8a96a"
+      },
+      "drops": [
+        "spruce_log"
+      ]
+    },
+    "birch_log": {
+      "id": 49,
+      "name": "Birch Log",
+      "solid": true,
+      "transparent": false,
+      "hardness": 2.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#e8d8b0",
+        "side": "#d0c090",
+        "bottom": "#e8d8b0"
+      },
+      "drops": [
+        "birch_log"
+      ]
+    },
+    "jungle_log": {
+      "id": 50,
+      "name": "Jungle Log",
+      "solid": true,
+      "transparent": false,
+      "hardness": 2.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#c8a96a",
+        "side": "#5a3a20",
+        "bottom": "#c8a96a"
+      },
+      "drops": [
+        "jungle_log"
+      ]
+    },
+    "acacia_log": {
+      "id": 51,
+      "name": "Acacia Log",
+      "solid": true,
+      "transparent": false,
+      "hardness": 2.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#c8a96a",
+        "side": "#8B5E3C",
+        "bottom": "#c8a96a"
+      },
+      "drops": [
+        "acacia_log"
+      ]
+    },
+    "dark_oak_log": {
+      "id": 52,
+      "name": "Dark Oak Log",
+      "solid": true,
+      "transparent": false,
+      "hardness": 2.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#c8a96a",
+        "side": "#2c1a0a",
+        "bottom": "#c8a96a"
+      },
+      "drops": [
+        "dark_oak_log"
+      ]
+    },
+    "sandstone": {
+      "id": 54,
+      "name": "Sandstone",
+      "solid": true,
+      "transparent": false,
+      "hardness": 0.8,
+      "lightEmit": 0,
+      "color": {
+        "top": "#e8d888",
+        "side": "#ddd095",
+        "bottom": "#c8b870"
+      },
+      "drops": [
+        "sandstone"
+      ]
+    },
+    "red_sand": {
+      "id": 55,
+      "name": "Red Sand",
+      "solid": true,
+      "transparent": false,
+      "hardness": 0.5,
+      "lightEmit": 0,
+      "color": {
+        "top": "#be6020",
+        "side": "#be6020",
+        "bottom": "#be6020"
+      },
+      "drops": [
+        "red_sand"
+      ]
+    },
+    "white_wool": {
+      "id": 57,
+      "name": "White Wool",
+      "solid": true,
+      "transparent": false,
+      "hardness": 0.8,
+      "lightEmit": 0,
+      "color": {
+        "top": "#f0f0f0",
+        "side": "#f0f0f0",
+        "bottom": "#f0f0f0"
+      },
+      "drops": [
+        "white_wool"
+      ]
+    },
+    "deepslate": {
+      "id": 63,
+      "name": "Deepslate",
+      "solid": true,
+      "transparent": false,
+      "hardness": 3.0,
+      "lightEmit": 0,
+      "color": {
+        "top": "#4a4a4a",
+        "side": "#3a3a3a",
+        "bottom": "#3a3a3a"
+      },
+      "drops": [
+        "cobbled_deepslate"
+      ]
+    },
+    "moss_block": {
+      "id": 65,
+      "name": "Moss Block",
+      "solid": true,
+      "transparent": false,
+      "hardness": 0.1,
+      "lightEmit": 0,
+      "color": {
+        "top": "#4a7a3a",
+        "side": "#3a6a2a",
+        "bottom": "#3a6a2a"
+      },
+      "drops": [
+        "moss_block"
+      ]
+    },
+    "mud": {
+      "id": 66,
+      "name": "Mud",
+      "solid": true,
+      "transparent": false,
+      "hardness": 0.5,
+      "lightEmit": 0,
+      "color": {
+        "top": "#3a2820",
+        "side": "#3a2820",
+        "bottom": "#3a2820"
+      },
+      "drops": [
+        "mud"
+      ]
+    },
+    "tuff": {
+      "id": 69,
+      "name": "Tuff",
+      "solid": true,
+      "transparent": false,
+      "hardness": 1.5,
+      "lightEmit": 0,
+      "color": {
+        "top": "#7a7a6a",
+        "side": "#6a6a5a",
+        "bottom": "#6a6a5a"
+      },
+      "drops": [
+        "tuff"
+      ]
+    },
+    "calcite": {
+      "id": 70,
+      "name": "Calcite",
+      "solid": true,
+      "transparent": false,
+      "hardness": 0.75,
+      "lightEmit": 0,
+      "color": {
+        "top": "#e8e8e0",
+        "side": "#d8d8d0",
+        "bottom": "#d8d8d0"
+      },
+      "drops": [
+        "calcite"
+      ]
+    },
+    "dripstone_block": {
+      "id": 71,
+      "name": "Dripstone Block",
+      "solid": true,
+      "transparent": false,
+      "hardness": 1.5,
+      "lightEmit": 0,
+      "color": {
+        "top": "#9b8070",
+        "side": "#8b7060",
+        "bottom": "#8b7060"
+      },
+      "drops": [
+        "dripstone_block"
+      ]
+    },
+    "basalt": {
+      "id": 76,
+      "name": "Basalt",
+      "solid": true,
+      "transparent": false,
+      "hardness": 1.25,
+      "lightEmit": 0,
+      "color": {
+        "top": "#4a4a4a",
+        "side": "#3a3a3a",
+        "bottom": "#4a4a4a"
+      },
+      "drops": [
+        "basalt"
+      ]
+    }
+  }
+}

@@ -1,0 +1,763 @@
+{
+  "version": "1.0.0",
+  "items": {
+    "coal": {
+      "id": 1001,
+      "name": "Coal",
+      "stackSize": 64,
+      "category": "materials",
+      "fuel": true,
+      "fuelTime": 80
+    },
+    "charcoal": {
+      "id": 1002,
+      "name": "Charcoal",
+      "stackSize": 64,
+      "category": "materials",
+      "fuel": true,
+      "fuelTime": 80
+    },
+    "iron_ingot": {
+      "id": 1003,
+      "name": "Iron Ingot",
+      "stackSize": 64,
+      "category": "materials"
+    },
+    "gold_ingot": {
+      "id": 1004,
+      "name": "Gold Ingot",
+      "stackSize": 64,
+      "category": "materials"
+    },
+    "diamond": {
+      "id": 1005,
+      "name": "Diamond",
+      "stackSize": 64,
+      "category": "materials"
+    },
+    "emerald": {
+      "id": 1006,
+      "name": "Emerald",
+      "stackSize": 64,
+      "category": "materials"
+    },
+    "lapis_lazuli": {
+      "id": 1008,
+      "name": "Lapis Lazuli",
+      "stackSize": 64,
+      "category": "materials"
+    },
+    "stick": {
+      "id": 1010,
+      "name": "Stick",
+      "stackSize": 64,
+      "category": "materials",
+      "fuel": true,
+      "fuelTime": 5
+    },
+    "string": {
+      "id": 1011,
+      "name": "String",
+      "stackSize": 64,
+      "category": "materials"
+    },
+    "feather": {
+      "id": 1012,
+      "name": "Feather",
+      "stackSize": 64,
+      "category": "materials"
+    },
+    "flint": {
+      "id": 1013,
+      "name": "Flint",
+      "stackSize": 64,
+      "category": "materials"
+    },
+    "bone": {
+      "id": 1014,
+      "name": "Bone",
+      "stackSize": 64,
+      "category": "materials"
+    },
+    "bone_meal": {
+      "id": 1015,
+      "name": "Bone Meal",
+      "stackSize": 64,
+      "category": "materials"
+    },
+    "leather": {
+      "id": 1016,
+      "name": "Leather",
+      "stackSize": 64,
+      "category": "materials"
+    },
+    "paper": {
+      "id": 1017,
+      "name": "Paper",
+      "stackSize": 64,
+      "category": "materials"
+    },
+    "book": {
+      "id": 1018,
+      "name": "Book",
+      "stackSize": 64,
+      "category": "materials"
+    },
+    "clay_ball": {
+      "id": 1019,
+      "name": "Clay Ball",
+      "stackSize": 64,
+      "category": "materials"
+    },
+    "brick": {
+      "id": 1020,
+      "name": "Brick",
+      "stackSize": 64,
+      "category": "materials"
+    },
+    "raw_iron": {
+      "id": 1028,
+      "name": "Raw Iron",
+      "stackSize": 64,
+      "category": "materials"
+    },
+    "raw_gold": {
+      "id": 1029,
+      "name": "Raw Gold",
+      "stackSize": 64,
+      "category": "materials"
+    },
+    "raw_copper": {
+      "id": 1030,
+      "name": "Raw Copper",
+      "stackSize": 64,
+      "category": "materials"
+    },
+    "copper_ingot": {
+      "id": 1031,
+      "name": "Copper Ingot",
+      "stackSize": 64,
+      "category": "materials"
+    },
+    "amethyst_shard": {
+      "id": 1034,
+      "name": "Amethyst Shard",
+      "stackSize": 64,
+      "category": "materials"
+    },
+    "wooden_sword": {
+      "id": 2001,
+      "name": "Wooden Sword",
+      "stackSize": 1,
+      "category": "combat",
+      "damage": 4,
+      "durability": 59
+    },
+    "stone_sword": {
+      "id": 2002,
+      "name": "Stone Sword",
+      "stackSize": 1,
+      "category": "combat",
+      "damage": 5,
+      "durability": 131
+    },
+    "iron_sword": {
+      "id": 2003,
+      "name": "Iron Sword",
+      "stackSize": 1,
+      "category": "combat",
+      "damage": 6,
+      "durability": 250
+    },
+    "gold_sword": {
+      "id": 2004,
+      "name": "Golden Sword",
+      "stackSize": 1,
+      "category": "combat",
+      "damage": 4,
+      "durability": 32
+    },
+    "diamond_sword": {
+      "id": 2005,
+      "name": "Diamond Sword",
+      "stackSize": 1,
+      "category": "combat",
+      "damage": 7,
+      "durability": 1561
+    },
+    "copper_sword": {
+      "id": 2007,
+      "name": "Copper Sword",
+      "stackSize": 1,
+      "category": "combat",
+      "damage": 5,
+      "durability": 200
+    },
+    "bow": {
+      "id": 2010,
+      "name": "Bow",
+      "stackSize": 1,
+      "category": "combat",
+      "damage": 9,
+      "durability": 384
+    },
+    "crossbow": {
+      "id": 2011,
+      "name": "Crossbow",
+      "stackSize": 1,
+      "category": "combat",
+      "damage": 11,
+      "durability": 465
+    },
+    "arrow": {
+      "id": 2012,
+      "name": "Arrow",
+      "stackSize": 64,
+      "category": "combat"
+    },
+    "shield": {
+      "id": 2013,
+      "name": "Shield",
+      "stackSize": 1,
+      "category": "combat",
+      "durability": 336
+    },
+    "wooden_pickaxe": {
+      "id": 3001,
+      "name": "Wooden Pickaxe",
+      "stackSize": 1,
+      "category": "tools",
+      "miningLevel": 1,
+      "durability": 59
+    },
+    "stone_pickaxe": {
+      "id": 3002,
+      "name": "Stone Pickaxe",
+      "stackSize": 1,
+      "category": "tools",
+      "miningLevel": 2,
+      "durability": 131
+    },
+    "iron_pickaxe": {
+      "id": 3003,
+      "name": "Iron Pickaxe",
+      "stackSize": 1,
+      "category": "tools",
+      "miningLevel": 3,
+      "durability": 250
+    },
+    "gold_pickaxe": {
+      "id": 3004,
+      "name": "Golden Pickaxe",
+      "stackSize": 1,
+      "category": "tools",
+      "miningLevel": 3,
+      "durability": 32
+    },
+    "diamond_pickaxe": {
+      "id": 3005,
+      "name": "Diamond Pickaxe",
+      "stackSize": 1,
+      "category": "tools",
+      "miningLevel": 4,
+      "durability": 1561
+    },
+    "copper_pickaxe": {
+      "id": 3007,
+      "name": "Copper Pickaxe",
+      "stackSize": 1,
+      "category": "tools",
+      "miningLevel": 2,
+      "durability": 200
+    },
+    "wooden_axe": {
+      "id": 3008,
+      "name": "Wooden Axe",
+      "stackSize": 1,
+      "category": "tools",
+      "durability": 59
+    },
+    "stone_axe": {
+      "id": 3009,
+      "name": "Stone Axe",
+      "stackSize": 1,
+      "category": "tools",
+      "durability": 131
+    },
+    "iron_axe": {
+      "id": 3010,
+      "name": "Iron Axe",
+      "stackSize": 1,
+      "category": "tools",
+      "durability": 250
+    },
+    "diamond_axe": {
+      "id": 3011,
+      "name": "Diamond Axe",
+      "stackSize": 1,
+      "category": "tools",
+      "durability": 1561
+    },
+    "wooden_shovel": {
+      "id": 3012,
+      "name": "Wooden Shovel",
+      "stackSize": 1,
+      "category": "tools",
+      "durability": 59
+    },
+    "stone_shovel": {
+      "id": 3013,
+      "name": "Stone Shovel",
+      "stackSize": 1,
+      "category": "tools",
+      "durability": 131
+    },
+    "iron_shovel": {
+      "id": 3014,
+      "name": "Iron Shovel",
+      "stackSize": 1,
+      "category": "tools",
+      "durability": 250
+    },
+    "diamond_shovel": {
+      "id": 3015,
+      "name": "Diamond Shovel",
+      "stackSize": 1,
+      "category": "tools",
+      "durability": 1561
+    },
+    "flint_and_steel": {
+      "id": 3016,
+      "name": "Flint and Steel",
+      "stackSize": 1,
+      "category": "tools",
+      "durability": 64
+    },
+    "fishing_rod": {
+      "id": 3017,
+      "name": "Fishing Rod",
+      "stackSize": 1,
+      "category": "tools",
+      "durability": 64
+    },
+    "shears": {
+      "id": 3018,
+      "name": "Shears",
+      "stackSize": 1,
+      "category": "tools",
+      "durability": 238
+    },
+    "compass": {
+      "id": 3019,
+      "name": "Compass",
+      "stackSize": 1,
+      "category": "tools"
+    },
+    "clock": {
+      "id": 3020,
+      "name": "Clock",
+      "stackSize": 1,
+      "category": "tools"
+    },
+    "spyglass": {
+      "id": 3021,
+      "name": "Spyglass",
+      "stackSize": 1,
+      "category": "tools"
+    },
+    "brush": {
+      "id": 3022,
+      "name": "Brush",
+      "stackSize": 1,
+      "category": "tools",
+      "durability": 64
+    },
+    "name_tag": {
+      "id": 3023,
+      "name": "Name Tag",
+      "stackSize": 64,
+      "category": "tools"
+    },
+    "lead": {
+      "id": 3024,
+      "name": "Lead",
+      "stackSize": 64,
+      "category": "tools"
+    },
+    "leather_helmet": {
+      "id": 4001,
+      "name": "Leather Cap",
+      "stackSize": 1,
+      "category": "armor",
+      "slot": "head",
+      "defense": 1,
+      "durability": 55
+    },
+    "leather_chest": {
+      "id": 4002,
+      "name": "Leather Tunic",
+      "stackSize": 1,
+      "category": "armor",
+      "slot": "chest",
+      "defense": 3,
+      "durability": 80
+    },
+    "leather_legs": {
+      "id": 4003,
+      "name": "Leather Pants",
+      "stackSize": 1,
+      "category": "armor",
+      "slot": "legs",
+      "defense": 2,
+      "durability": 75
+    },
+    "leather_boots": {
+      "id": 4004,
+      "name": "Leather Boots",
+      "stackSize": 1,
+      "category": "armor",
+      "slot": "feet",
+      "defense": 1,
+      "durability": 65
+    },
+    "iron_helmet": {
+      "id": 4005,
+      "name": "Iron Helmet",
+      "stackSize": 1,
+      "category": "armor",
+      "slot": "head",
+      "defense": 2,
+      "durability": 165
+    },
+    "iron_chest": {
+      "id": 4006,
+      "name": "Iron Chestplate",
+      "stackSize": 1,
+      "category": "armor",
+      "slot": "chest",
+      "defense": 6,
+      "durability": 240
+    },
+    "iron_legs": {
+      "id": 4007,
+      "name": "Iron Leggings",
+      "stackSize": 1,
+      "category": "armor",
+      "slot": "legs",
+      "defense": 5,
+      "durability": 225
+    },
+    "iron_boots": {
+      "id": 4008,
+      "name": "Iron Boots",
+      "stackSize": 1,
+      "category": "armor",
+      "slot": "feet",
+      "defense": 2,
+      "durability": 195
+    },
+    "diamond_helmet": {
+      "id": 4009,
+      "name": "Diamond Helmet",
+      "stackSize": 1,
+      "category": "armor",
+      "slot": "head",
+      "defense": 3,
+      "durability": 363
+    },
+    "diamond_chest": {
+      "id": 4010,
+      "name": "Diamond Chestplate",
+      "stackSize": 1,
+      "category": "armor",
+      "slot": "chest",
+      "defense": 8,
+      "durability": 528
+    },
+    "diamond_legs": {
+      "id": 4011,
+      "name": "Diamond Leggings",
+      "stackSize": 1,
+      "category": "armor",
+      "slot": "legs",
+      "defense": 6,
+      "durability": 495
+    },
+    "diamond_boots": {
+      "id": 4012,
+      "name": "Diamond Boots",
+      "stackSize": 1,
+      "category": "armor",
+      "slot": "feet",
+      "defense": 3,
+      "durability": 429
+    },
+    "apple": {
+      "id": 5001,
+      "name": "Apple",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 4,
+      "saturation": 2.4
+    },
+    "golden_apple": {
+      "id": 5002,
+      "name": "Golden Apple",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 4,
+      "saturation": 9.6
+    },
+    "bread": {
+      "id": 5004,
+      "name": "Bread",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 5,
+      "saturation": 6.0
+    },
+    "cooked_beef": {
+      "id": 5005,
+      "name": "Steak",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 8,
+      "saturation": 12.8
+    },
+    "raw_beef": {
+      "id": 5006,
+      "name": "Raw Beef",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 3,
+      "saturation": 1.8
+    },
+    "cooked_chicken": {
+      "id": 5007,
+      "name": "Cooked Chicken",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 6,
+      "saturation": 7.2
+    },
+    "raw_chicken": {
+      "id": 5008,
+      "name": "Raw Chicken",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 2,
+      "saturation": 1.2
+    },
+    "cooked_porkchop": {
+      "id": 5009,
+      "name": "Cooked Porkchop",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 8,
+      "saturation": 12.8
+    },
+    "raw_porkchop": {
+      "id": 5010,
+      "name": "Raw Porkchop",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 3,
+      "saturation": 1.8
+    },
+    "cooked_mutton": {
+      "id": 5011,
+      "name": "Cooked Mutton",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 6,
+      "saturation": 9.6
+    },
+    "cooked_salmon": {
+      "id": 5012,
+      "name": "Cooked Salmon",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 6,
+      "saturation": 9.6
+    },
+    "cooked_cod": {
+      "id": 5013,
+      "name": "Cooked Cod",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 5,
+      "saturation": 6.0
+    },
+    "cooked_rabbit": {
+      "id": 5014,
+      "name": "Cooked Rabbit",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 5,
+      "saturation": 6.0
+    },
+    "carrot": {
+      "id": 5015,
+      "name": "Carrot",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 3,
+      "saturation": 3.6
+    },
+    "golden_carrot": {
+      "id": 5016,
+      "name": "Golden Carrot",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 6,
+      "saturation": 14.4
+    },
+    "potato": {
+      "id": 5017,
+      "name": "Potato",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 1,
+      "saturation": 0.6
+    },
+    "baked_potato": {
+      "id": 5018,
+      "name": "Baked Potato",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 5,
+      "saturation": 6.0
+    },
+    "melon_slice": {
+      "id": 5019,
+      "name": "Melon Slice",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 2,
+      "saturation": 1.2
+    },
+    "pumpkin_pie": {
+      "id": 5020,
+      "name": "Pumpkin Pie",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 8,
+      "saturation": 4.8
+    },
+    "cookie": {
+      "id": 5021,
+      "name": "Cookie",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 2,
+      "saturation": 0.4
+    },
+    "cake": {
+      "id": 5022,
+      "name": "Cake",
+      "stackSize": 1,
+      "category": "food",
+      "hunger": 2,
+      "saturation": 0.4
+    },
+    "mushroom_stew": {
+      "id": 5023,
+      "name": "Mushroom Stew",
+      "stackSize": 1,
+      "category": "food",
+      "hunger": 6,
+      "saturation": 7.2
+    },
+    "rabbit_stew": {
+      "id": 5024,
+      "name": "Rabbit Stew",
+      "stackSize": 1,
+      "category": "food",
+      "hunger": 10,
+      "saturation": 12.0
+    },
+    "beetroot": {
+      "id": 5025,
+      "name": "Beetroot",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 1,
+      "saturation": 1.2
+    },
+    "beetroot_soup": {
+      "id": 5026,
+      "name": "Beetroot Soup",
+      "stackSize": 1,
+      "category": "food",
+      "hunger": 6,
+      "saturation": 7.2
+    },
+    "dried_kelp": {
+      "id": 5027,
+      "name": "Dried Kelp",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 1,
+      "saturation": 0.6
+    },
+    "honey_bottle": {
+      "id": 5028,
+      "name": "Honey Bottle",
+      "stackSize": 16,
+      "category": "food",
+      "hunger": 6,
+      "saturation": 1.2
+    },
+    "glow_berries": {
+      "id": 5030,
+      "name": "Glow Berries",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 2,
+      "saturation": 0.4
+    },
+    "sweet_berries": {
+      "id": 5031,
+      "name": "Sweet Berries",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 2,
+      "saturation": 0.4
+    },
+    "pufferfish": {
+      "id": 5033,
+      "name": "Pufferfish",
+      "stackSize": 64,
+      "category": "food",
+      "hunger": 1,
+      "saturation": 0.2,
+      "poisonChance": 1.0
+    },
+    "water_bucket": {
+      "id": 6001,
+      "name": "Water Bucket",
+      "stackSize": 1,
+      "category": "buckets"
+    },
+    "lava_bucket": {
+      "id": 6002,
+      "name": "Lava Bucket",
+      "stackSize": 1,
+      "category": "buckets",
+      "fuel": true,
+      "fuelTime": 1000
+    },
+    "milk_bucket": {
+      "id": 6003,
+      "name": "Milk Bucket",
+      "stackSize": 1,
+      "category": "buckets"
+    },
+    "bucket": {
+      "id": 6004,
+      "name": "Bucket",
+      "stackSize": 16,
+      "category": "buckets"
+    }
+  }
+}
