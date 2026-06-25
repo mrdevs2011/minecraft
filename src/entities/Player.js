@@ -38,6 +38,15 @@ export class Player {
   getEyeY() { return this.y + EYE_HEIGHT; }
   getEyeZ() { return this.z; }
 
+  // O'yinchi turgan blok koordinatalarini qaytaradi: { bx, by, bz }
+  getBlockCoords() {
+    return {
+      bx: Math.floor(this.x),
+      by: Math.floor(this.y),
+      bz: Math.floor(this.z),
+    };
+  }
+
   getSelectedBlock() { return this.inventory[this.hotbarSlot]; }
 
   update(dt, input) {
@@ -127,8 +136,8 @@ export class Player {
     const ny = this.y + this.vy * dt;
     const nz = this.z + this.vz * dt;
 
-    if (!this._collidesAt(nx, this.y, this.z)) this.x = nx;
-    if (!this._collidesAt(this.x, this.y, nz)) this.z = nz;
+    if (!this._collidesHorizontal(nx, this.y, this.z)) this.x = nx;
+    if (!this._collidesHorizontal(this.x, this.y, nz)) this.z = nz;
 
     if (!this._collidesAt(this.x, ny, this.z)) {
       this.y = ny;
@@ -136,8 +145,8 @@ export class Player {
     } else {
       if (this.vy < 0) {
         this.onGround = true;
-        // Snap to exact block top
-        this.y = Math.round(this.y);
+        // Pastdagi blok ustiga aniq snap qil
+        this._snapToBlockSurface();
       }
       this.vy = 0;
     }
@@ -145,6 +154,18 @@ export class Player {
     // onGround = true faqat oyoq ostida blok bo'lsa
     // (yon yoki yuqoridagi blok sakrashni blokirovka qilmasin)
     this.onGround = this._isOnGround();
+  }
+
+  // Oyoq ostidagi qattiq blokni topib, o'yinchini uning yuqori chegarasiga snap qiladi.
+  // Blok havo bo'lsa hech narsa qilmaydi.
+  _snapToBlockSurface() {
+    const blockY = Math.floor(this.y);           // oyoq turgan blok
+    const blockId = this.world.getBlock(
+      Math.floor(this.x), blockY, Math.floor(this.z)
+    );
+    if (blockId !== BLOCK_AIR) {
+      this.y = blockY + 1;                       // blok yuqori chegarasi
+    }
   }
 
   // Faqat oyoq ostini tekshiradi — player pastga bitta pixel siljisa blokka tegadimi?
@@ -158,6 +179,24 @@ export class Player {
           Math.floor(feetY),
           Math.floor(this.z + dz)
         )) return true;
+      }
+    }
+    return false;
+  }
+
+  // Yon harakatlar (X/Z) uchun: o'yinchi balandligi bo'ylab har 0.25 birlkda tekshiradi.
+  // _collidesAt dan aniqroq — tor devor teshiklaridan o'tib ketishni oldini oladi.
+  _collidesHorizontal(x, y, z) {
+    const hw = this.width / 2;
+    for (let dx = -hw; dx <= hw; dx += hw) {
+      for (let dz = -hw; dz <= hw; dz += hw) {
+        for (let dy = 0.05; dy < this.height; dy += 0.25) {
+          if (this.world.isSolid(
+            Math.floor(x + dx),
+            Math.floor(y + dy),
+            Math.floor(z + dz)
+          )) return true;
+        }
       }
     }
     return false;
