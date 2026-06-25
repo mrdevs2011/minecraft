@@ -72,7 +72,6 @@ export class Renderer {
       },
       vertexShader: /* glsl */`
         attribute vec3 color;
-        attribute vec2 uv;
         varying vec3 vColor;
         varying vec3 vWorldPos;
         varying vec2 vUv;
