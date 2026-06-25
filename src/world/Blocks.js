@@ -21,6 +21,11 @@ export const BLOCK_DIAMOND_ORE  = 56;
 export const BLOCK_SNOW         = 78;
 export const BLOCK_SNOW_BLOCK   = 80;
 
+// ─── Qo‘shimcha alias (eski kodlar bilan moslik uchun) ───
+export const BLOCK_LEAVES = BLOCK_OAK_LEAVES; // 18
+export const BLOCK_WOOD   = BLOCK_OAK_LOG;    // 17 (agar kerak bo‘lsa)
+export const BLOCK_PLANKS = BLOCK_OAK_PLANKS; // 5 (agar kerak bo‘lsa)
+
 export const Blocks = {
   [BLOCK_AIR]:          { name: 'Air',          solid: false, transparent: true,  hardness: 0,   color: { top: null, side: null, bottom: null } },
   [BLOCK_STONE]:        { name: 'Stone',        solid: true,  transparent: false, hardness: 1.5, color: { top: '#8c8c8c', side: '#8c8c8c', bottom: '#8c8c8c' } },
