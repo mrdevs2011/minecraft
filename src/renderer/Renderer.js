@@ -195,8 +195,10 @@ export class Renderer {
     this.highlight.visible = false;
     this.scene.add(this.highlight);
 
+    // ─── Mahalliy o'yinchi avatar ───
     this._localAvatarId = 'steve';
-    this.steve = new SteveAvatar(this.scene);
+    this.steve = null; // keyin createAvatar bilan yaratamiz
+    this._createLocalAvatar();
 
     this._otherPlayerModels = new Map();
 
@@ -210,6 +212,29 @@ export class Renderer {
     });
 
     this.resize();
+  }
+
+  // ─── Mahalliy avatar yaratish ───
+  _createLocalAvatar() {
+    if (this.steve) {
+      this.steve.dispose();
+    }
+    this.steve = createAvatar(this.scene, this._localAvatarId);
+    this.steve.setVisible(this._viewMode === 'third');
+  }
+
+  // ─── Avatar ID ni o'zgartirish ───
+  setLocalAvatarId(avatarId) {
+    if (!avatarId || this._localAvatarId === avatarId) return;
+    this._localAvatarId = avatarId;
+    this._createLocalAvatar();
+  }
+
+  // ─── Steve ni yangilash ───
+  _updateSteve(player, moving, dt) {
+    if (!this.steve) return;
+    this.steve.setVisible(this._viewMode === 'third');
+    this.steve.update(player.x, player.y, player.z, player.yaw, !!moving, dt);
   }
 
   resize() {
@@ -274,8 +299,8 @@ export class Renderer {
     );
     this._frustum.setFromProjectionMatrix(this._frustumMatrix);
 
-    // ─── YANGI: koʻrish radiusi 5×5 chunk ───
-    const VISIBLE_RADIUS = 2; // 5×5
+    // Ko'rish radiusi 5×5 chunk
+    const VISIBLE_RADIUS = 2;
     const pcx = Math.floor(player.x / CHUNK_SIZE);
     const pcz = Math.floor(player.z / CHUNK_SIZE);
 
@@ -294,8 +319,202 @@ export class Renderer {
     this.webgl.render(this.scene, this.camera);
   }
 
-  // Qolgan metodlar (setLocalAvatarId, syncOtherPlayers, _tickOtherPlayers,
-  // _updateSteve, _syncCamera, _updateHighlight, _chunkKey, _updateChunks,
-  // _ensureChunkMesh) o‘zgarishsiz — ularni bu yerda takrorlamaymiz.
-  // To‘liq kod loyihada mavjud.
+  // ─── Boshqa o'yinchilarni sinxronlash ───
+  syncOtherPlayers(playersMap) {
+    for (const [uid, entry] of this._otherPlayerModels) {
+      if (!playersMap.has(uid)) {
+        entry.model.dispose();
+        if (entry.labelEl && entry.labelEl.parentNode) {
+          entry.labelEl.parentNode.removeChild(entry.labelEl);
+        }
+        this._otherPlayerModels.delete(uid);
+      }
+    }
+
+    for (const [uid, data] of playersMap) {
+      if (!this._otherPlayerModels.has(uid)) {
+        const model = createAvatar(this.scene, data.avatarId || 'steve');
+
+        const labelEl = document.createElement('div');
+        labelEl.className = 'player-label';
+        labelEl.textContent = data.displayName || 'Player';
+        labelEl.style.cssText = [
+          'position:absolute',
+          'pointer-events:none',
+          'color:#fff',
+          'font-size:11px',
+          'font-family:monospace',
+          'background:rgba(0,0,0,0.5)',
+          'padding:1px 5px',
+          'border-radius:3px',
+          'white-space:nowrap',
+          'transform:translate(-50%,-100%)',
+          'display:none',
+        ].join(';');
+        this.canvas.parentElement?.appendChild(labelEl);
+
+        this._otherPlayerModels.set(uid, {
+          model, data, labelEl, _animTime: 0,
+          cur: { x: data.x, y: data.y, z: data.z, yaw: data.yaw },
+          tgt: { x: data.x, y: data.y, z: data.z, yaw: data.yaw },
+        });
+      }
+
+      const entry = this._otherPlayerModels.get(uid);
+      if (data.avatarId && entry.data.avatarId !== data.avatarId) {
+        entry.model.dispose();
+        entry.model = createAvatar(this.scene, data.avatarId);
+      }
+      entry.tgt.x   = data.x;
+      entry.tgt.y   = data.y;
+      entry.tgt.z   = data.z;
+      entry.tgt.yaw = data.yaw;
+      entry.data    = data;
+    }
+  }
+
+  _tickOtherPlayers(dt) {
+    const LERP = 12;
+
+    for (const [, entry] of this._otherPlayerModels) {
+      const { data, model, labelEl, cur, tgt } = entry;
+
+      const t = Math.min(1, LERP * dt);
+      cur.x += (tgt.x - cur.x) * t;
+      cur.y += (tgt.y - cur.y) * t;
+      cur.z += (tgt.z - cur.z) * t;
+
+      let dyaw = tgt.yaw - cur.yaw;
+      while (dyaw >  Math.PI) dyaw -= Math.PI * 2;
+      while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+      cur.yaw += dyaw * t;
+
+      model.update(cur.x, cur.y, cur.z, cur.yaw, !!data.moving, dt);
+
+      const isGhost = !!data.isGhost;
+      model.setGhost(isGhost);
+
+      if (labelEl) {
+        const worldPos  = new THREE.Vector3(cur.x, cur.y + 2.4, cur.z);
+        const projected = worldPos.project(this.camera);
+        if (projected.z < 1) {
+          const hw = this.canvas.clientWidth  / 2;
+          const hh = this.canvas.clientHeight / 2;
+          const sx = Math.round( projected.x * hw + hw);
+          const sy = Math.round(-projected.y * hh + hh);
+          labelEl.style.left    = sx + 'px';
+          labelEl.style.top     = sy + 'px';
+          labelEl.style.display = 'block';
+        } else {
+          labelEl.style.display = 'none';
+        }
+      }
+    }
+  }
+
+  _syncCamera(player) {
+    if (this._viewMode === 'first') {
+      this.camera.position.set(player.x, player.getEyeY(), player.z);
+      this.camera.rotation.set(player.pitch, player.yaw, 0, 'YXZ');
+    } else {
+      const sinY     = Math.sin(player.yaw);
+      const cosY     = Math.cos(player.yaw);
+      const pitch    = Math.max(-Math.PI * 0.44, Math.min(Math.PI * 0.44, player.pitch));
+      const cosPitch = Math.cos(pitch);
+      const sinPitch = Math.sin(pitch);
+
+      this.camera.position.set(
+        player.x + sinY * CAM_DIST_BACK * cosPitch,
+        player.y + CAM_DIST_UP - sinPitch * CAM_DIST_BACK,
+        player.z + cosY * CAM_DIST_BACK * cosPitch
+      );
+
+      const lookTarget = new THREE.Vector3(player.x, player.y + 1.0, player.z);
+      this.camera.lookAt(lookTarget);
+    }
+  }
+
+  _updateHighlight(hit) {
+    if (hit && hit.hit) {
+      this.highlight.visible = true;
+      this.highlight.position.set(hit.blockX + 0.5, hit.blockY + 0.5, hit.blockZ + 0.5);
+    } else {
+      this.highlight.visible = false;
+    }
+  }
+
+  _chunkKey(cx, cz) { return `${cx},${cz}`; }
+
+  _updateChunks(player) {
+    const cx   = Math.floor(player.x / CHUNK_SIZE);
+    const cz   = Math.floor(player.z / CHUNK_SIZE);
+    const dist = this.world.renderDistance;
+    const wanted = new Set();
+
+    for (let dx = -dist; dx <= dist; dx++) {
+      for (let dz = -dist; dz <= dist; dz++) {
+        const ccx = cx + dx, ccz = cz + dz;
+        wanted.add(this._chunkKey(ccx, ccz));
+        this._ensureChunkMesh(ccx, ccz);
+      }
+    }
+
+    for (const [key, entry] of this.chunkMeshes) {
+      if (!wanted.has(key)) {
+        if (entry.opaqueMesh) this.scene.remove(entry.opaqueMesh);
+        if (entry.glassMesh)  this.scene.remove(entry.glassMesh);
+        if (entry.waterMesh)  this.scene.remove(entry.waterMesh);
+        entry.opaqueMesh?.geometry.dispose();
+        entry.glassMesh?.geometry.dispose();
+        entry.waterMesh?.geometry.dispose();
+        this.chunkMeshes.delete(key);
+      }
+    }
+  }
+
+  _ensureChunkMesh(cx, cz) {
+    const key   = this._chunkKey(cx, cz);
+    const chunk = this.world.getChunk(cx, cz);
+    let entry   = this.chunkMeshes.get(key);
+
+    if (entry && !chunk.dirty) return;
+
+    if (entry) {
+      if (entry.opaqueMesh) this.scene.remove(entry.opaqueMesh);
+      if (entry.glassMesh)  this.scene.remove(entry.glassMesh);
+      if (entry.waterMesh)  this.scene.remove(entry.waterMesh);
+      entry.opaqueMesh?.geometry.dispose();
+      entry.glassMesh?.geometry.dispose();
+      entry.waterMesh?.geometry.dispose();
+    }
+
+    const { opaqueGeom, glassGeom, waterGeom, boundingBox } = buildChunkMesh(
+      chunk, this.world, this.world.fluid, this._getUV
+    );
+    const newEntry = {
+      opaqueMesh: null,
+      glassMesh:  null,
+      waterMesh:  null,
+      boundingBox: boundingBox || null,
+    };
+
+    if (opaqueGeom) {
+      newEntry.opaqueMesh = new THREE.Mesh(opaqueGeom, this.opaqueMat);
+      newEntry.opaqueMesh.frustumCulled = false;
+      this.scene.add(newEntry.opaqueMesh);
+    }
+    if (glassGeom) {
+      newEntry.glassMesh = new THREE.Mesh(glassGeom, this.glassMat);
+      newEntry.glassMesh.frustumCulled = false;
+      this.scene.add(newEntry.glassMesh);
+    }
+    if (waterGeom) {
+      newEntry.waterMesh = new THREE.Mesh(waterGeom, this.waterMat);
+      newEntry.waterMesh.frustumCulled = false;
+      this.scene.add(newEntry.waterMesh);
+    }
+
+    this.chunkMeshes.set(key, newEntry);
+    chunk.dirty = false;
+  }
 }
