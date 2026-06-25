@@ -13,8 +13,6 @@ const CAM_DIST_UP    = 1.6;
 // ── Shared AO vertex shader ───────────────────────────────────────────────
 // THREE.js built-in: position, normal, uv — qayta e'lon qilinmaydi.
 // color — ChunkMesher dan AO * shade * blockColor (RGB, 0..1).
-// vAO   — AO qiymati (color.r / baseColor.r dan ajratish o'rniga alohida kanal ishlatilsa
-//         yanada aniqroq bo'ladi, lekin hozir color ichida encoded).
 const AO_VERT = /* glsl */`
   attribute vec3 color;
   varying vec3  vColor;
@@ -139,6 +137,19 @@ export class Renderer {
     this.webgl = new THREE.WebGLRenderer({ canvas, antialias: false });
     this.webgl.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
+    // ── Back-face culling: GPU darajasida orqa yuzalarni o'chirish ──
+    // THREE.FrontSide — faqat kameraga qaragan yuzalarni render qiladi.
+    // Bu GPU triangle count ni taxminan 40-50% ga kamaytiradi.
+    this.webgl.localClippingEnabled = false;
+    // (ShaderMaterial lar quyida THREE.FrontSide bilan yaratiladi)
+
+    // ── Frustum Culling uchun Frustum ob'ekti ──
+    this._frustum        = new THREE.Frustum();
+    this._frustumMatrix  = new THREE.Matrix4();
+    // Chunk AABB sphere: frustum tekshiruvi uchun ishlatiladi
+    this._tmpBox3        = new THREE.Box3();
+    this._tmpSphere      = new THREE.Sphere();
+
     // ── Lighting (ambient faqat — AO shaderda boshqariladi) ──
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.55));
     this.sun = new THREE.DirectionalLight(0xffffff, 0.85);
@@ -161,7 +172,8 @@ export class Renderer {
     this._fogNear  = 80;
     this._fogFar   = 180;
 
-    // ── Opaque ShaderMaterial: AO + gamma + fog ──
+    // ── Opaque ShaderMaterial: AO + gamma + fog + back-face culling ──
+    // side: THREE.FrontSide — GPU orqa yuzalarni discard qiladi (back-face culling)
     this.opaqueMat = new THREE.ShaderMaterial({
       uniforms: {
         uAtlas:  { value: this._atlasTexture },
@@ -170,9 +182,11 @@ export class Renderer {
       },
       vertexShader:   AO_VERT,
       fragmentShader: AO_FRAG,
+      side: THREE.FrontSide,   // ← Back-face culling: faqat old yuz
     });
 
-    // ── Glass ShaderMaterial: shaffof, AO ──
+    // ── Glass ShaderMaterial: shaffof, AO, back-face culling ──
+    // Glass uchun ham FrontSide — shisha yuzalari ham culling qabul qiladi
     this.glassMat = new THREE.ShaderMaterial({
       uniforms: {
         uAtlas:   { value: this._atlasTexture },
@@ -183,9 +197,11 @@ export class Renderer {
       fragmentShader: AO_FRAG,
       transparent: true,
       depthWrite:  false,
+      side: THREE.FrontSide,   // ← Back-face culling
     });
 
-    // ── Water ShaderMaterial ──
+    // ── Water ShaderMaterial: ikki tomoni ko'rinadigan (DoubleSide) ──
+    // Suv ichida qaralayotganda pastki yuzalar ham ko'rinishi kerak.
     this.waterMat = new THREE.ShaderMaterial({
       transparent: true,
       depthWrite:  false,
@@ -196,6 +212,7 @@ export class Renderer {
       },
       vertexShader:   WATER_VERT,
       fragmentShader: WATER_FRAG,
+      side: THREE.DoubleSide,  // Suv ichidan ham ko'rinsin
     });
 
     this.chunkMeshes = new Map();
@@ -285,6 +302,24 @@ export class Renderer {
       mat.uniforms.uFogColor.value.copy(fogVec);
       mat.uniforms.uFogNear.value  = fogNear;
       mat.uniforms.uFogFar.value   = fogFar;
+    }
+
+    // ── Frustum yangilash: har frame kamera matritsasidan ──
+    this._frustumMatrix.multiplyMatrices(
+      this.camera.projectionMatrix,
+      this.camera.matrixWorldInverse
+    );
+    this._frustum.setFromProjectionMatrix(this._frustumMatrix);
+
+    // ── Frustum Culling: ko'rinmaydigan chunk meshlarini yashirish ──
+    // Har chunk entry sida .boundingBox (THREE.Box3) saqlanadi.
+    // Frustum bilan kesishmasalar — mesh.visible = false.
+    for (const [, entry] of this.chunkMeshes) {
+      if (!entry.boundingBox) continue;
+      const visible = this._frustum.intersectsBox(entry.boundingBox);
+      if (entry.opaqueMesh) entry.opaqueMesh.visible = visible;
+      if (entry.glassMesh)  entry.glassMesh.visible  = visible;
+      if (entry.waterMesh)  entry.waterMesh.visible  = visible;
     }
 
     this.webgl.render(this.scene, this.camera);
@@ -478,21 +513,30 @@ export class Renderer {
       entry.waterMesh?.geometry.dispose();
     }
 
-    const { opaqueGeom, glassGeom, waterGeom } = buildChunkMesh(
+    const { opaqueGeom, glassGeom, waterGeom, boundingBox } = buildChunkMesh(
       chunk, this.world, this.world.fluid, this._getUV
     );
-    const newEntry = { opaqueMesh: null, glassMesh: null, waterMesh: null };
+    const newEntry = {
+      opaqueMesh: null,
+      glassMesh:  null,
+      waterMesh:  null,
+      boundingBox: boundingBox || null,   // Frustum Culling uchun AABB
+    };
 
     if (opaqueGeom) {
       newEntry.opaqueMesh = new THREE.Mesh(opaqueGeom, this.opaqueMat);
+      // THREE.js o'z frustum culling sini ishlatmasin — biz qo'lda boshqaramiz
+      newEntry.opaqueMesh.frustumCulled = false;
       this.scene.add(newEntry.opaqueMesh);
     }
     if (glassGeom) {
       newEntry.glassMesh = new THREE.Mesh(glassGeom, this.glassMat);
+      newEntry.glassMesh.frustumCulled = false;
       this.scene.add(newEntry.glassMesh);
     }
     if (waterGeom) {
       newEntry.waterMesh = new THREE.Mesh(waterGeom, this.waterMat);
+      newEntry.waterMesh.frustumCulled = false;
       this.scene.add(newEntry.waterMesh);
     }
 

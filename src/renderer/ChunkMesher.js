@@ -13,6 +13,24 @@ const FACES = [
   { dir: [0, 0, -1], corners: [[1,0,0],[0,0,0],[0,1,0],[1,1,0]], shade: 0.60, face: 'side' },
 ];
 
+// ── Block definition cache: getBlock() ni har safar chaqirmaslik ──────────
+// Blok ID lari 0..255, oldindan yuklash tezlikni oshiradi.
+const _blockDefCache = new Array(256).fill(null);
+function getBlockDef(id) {
+  if (_blockDefCache[id] === null) _blockDefCache[id] = getBlock(id);
+  return _blockDefCache[id];
+}
+
+// ── Solid mask: to'liq qattiq, shaffof EMAS bloklarni fast-path tekshiruvi ─
+// Boolean massiv — shouldCull ichidagi getBlock() chaqiruvini yo'q qiladi.
+const _isSolidOpaque = new Uint8Array(256);
+(function buildSolidMask() {
+  for (let i = 0; i < 256; i++) {
+    const d = getBlock(i);
+    _isSolidOpaque[i] = (d.solid && !d.transparent) ? 1 : 0;
+  }
+})();
+
 function hexToRgb(hex) {
   const r = parseInt(hex.slice(1,3), 16) / 255;
   const g = parseInt(hex.slice(3,5), 16) / 255;
@@ -46,19 +64,18 @@ function waterCornerHeights(wx, wy, wz, fluid) {
 }
 
 // ── Face Culling: bu yuzani chizish kerakmi? ──────────────────────────────
+// Optimizatsiya: _isSolidOpaque bitmask bilan birinchi fast-path tekshiruv.
+// getBlock() faqat shaffof bloklar uchun chaqiriladi.
 // selfId   — hozirgi blok
 // neighId  — qo'shni blok
 // Returns true → yuzani CHETLAB O'T (cull), false → CHIZ
 function shouldCull(selfId, neighId) {
   if (neighId === BLOCK_AIR) return false;          // bo'sh — har doim ko'rsatish
 
-  const selfDef  = getBlock(selfId);
-  const neighDef = getBlock(neighId);
+  // Fast-path: qo'shni to'liq qattiq, shaffof emas — bitmask bilan
+  if (_isSolidOpaque[neighId]) return true;
 
-  // Qo'shni to'liq qattiq va shaffof emas → yashirin yuz
-  if (neighDef.solid && !neighDef.transparent) return true;
-
-  // Xuddi shu shaffof blok turi → ichki yuz yo'q (glass↔glass, leaves↔leaves)
+  // Xuddi shu blok turi (shaffof bloklar ichki yuzasiz: glass↔glass, leaves↔leaves)
   if (selfId === neighId) return true;
 
   // Suv o'z ichida cull
@@ -75,12 +92,8 @@ function calcAO(side1, side2, corner) {
 }
 
 function faceAO(wx, wy, wz, faceIdx, getNeighbor) {
-  const isSolid = (x, y, z) => {
-    const id = getNeighbor(x, y, z);
-    if (id === BLOCK_AIR) return false;
-    const def = getBlock(id);
-    return def.solid && !def.transparent;
-  };
+  // isSolid: _isSolidOpaque bitmask bilan — getBlock() chaqirilmaydi
+  const isSolid = (x, y, z) => _isSolidOpaque[getNeighbor(x, y, z)] === 1;
 
   let aoValues = [1, 1, 1, 1];
   switch (faceIdx) {
@@ -175,8 +188,26 @@ function buildNeighborCache(chunk, world) {
   };
 }
 
+// ── heightMap: har ustun uchun eng yuqori qattiq blok balandligi ──────────
+// Ushbu ma'lumot Frustum Culling uchun chunk AABB ni aniqroq hisoblashga yordam beradi.
+function buildHeightMap(chunk) {
+  const heights = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE);
+  for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+    for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+      let maxY = 0;
+      for (let ly = CHUNK_HEIGHT - 1; ly >= 0; ly--) {
+        if (chunk.get(lx, ly, lz) !== BLOCK_AIR) { maxY = ly + 1; break; }
+      }
+      heights[lx * CHUNK_SIZE + lz] = maxY;
+    }
+  }
+  return heights;
+}
+
 /**
  * Chunk mesh qurish — NeighborCache + shouldCull + AO quad-flip.
+ * Qaytaradi: { opaqueGeom, glassGeom, waterGeom, boundingBox }
+ *   boundingBox — THREE.Box3, Frustum Culling uchun ishlatiladi.
  */
 export function buildChunkMesh(chunk, world, fluid, getUV) {
   const wx0 = chunk.worldX();
@@ -184,6 +215,13 @@ export function buildChunkMesh(chunk, world, fluid, getUV) {
 
   // ── Neighbor cache: chunk chegarasi uchun bir marta yig'ish ──
   const getNeighbor = buildNeighborCache(chunk, world);
+
+  // ── Height map: AABB uchun maksimal Y ni aniqlash ──
+  const heightMap = buildHeightMap(chunk);
+  let maxFilledY = 0;
+  for (let i = 0; i < heightMap.length; i++) {
+    if (heightMap[i] > maxFilledY) maxFilledY = heightMap[i];
+  }
 
   const opaquePos  = [], opaqueCol  = [], opaqueNorm  = [], opaqueUV  = [];
   const glassPos   = [], glassCol   = [], glassNorm   = [], glassUV   = [];
@@ -193,10 +231,15 @@ export function buildChunkMesh(chunk, world, fluid, getUV) {
 
   for (let lx = 0; lx < CHUNK_SIZE; lx++) {
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-      for (let ly = 0; ly < CHUNK_HEIGHT; ly++) {
+      // ── Ustun Culling: bu ustunda biron blok bormi? ──
+      // Agar heightMap[lx, lz] = 0 bo'lsa, bu ustun bo'sh — o'tkazib yuborish.
+      const colMaxY = heightMap[lx * CHUNK_SIZE + lz];
+      if (colMaxY === 0) continue;
+
+      for (let ly = 0; ly < colMaxY; ly++) {
         const id = chunk.get(lx, ly, lz);
         if (id === BLOCK_AIR) continue;
-        const def = getBlock(id);
+        const def = getBlockDef(id);  // cache orqali — getBlock() qayta chaqirilmaydi
         const isWater = id === BLOCK_WATER;
         const isGlass = id === BLOCK_GLASS;
 
@@ -292,13 +335,21 @@ export function buildChunkMesh(chunk, world, fluid, getUV) {
     geom.setAttribute('color',    new THREE.Float32BufferAttribute(col, 3));
     geom.setAttribute('normal',   new THREE.Float32BufferAttribute(norm, 3));
     geom.setAttribute('uv',       new THREE.Float32BufferAttribute(uvArr, 2));
+    geom.computeBoundingBox();
     return geom;
   };
+
+  // ── Chunk AABB: Frustum Culling uchun bounding box ──
+  // World koordinatalarida: chunk yer ustidan maxFilledY gacha.
+  const boundingBox = new THREE.Box3(
+    new THREE.Vector3(wx0,            0,            wz0),
+    new THREE.Vector3(wx0 + CHUNK_SIZE, maxFilledY, wz0 + CHUNK_SIZE)
+  );
 
   return {
     opaqueGeom: makeGeom(opaquePos, opaqueCol, opaqueNorm, opaqueUV),
     glassGeom:  makeGeom(glassPos,  glassCol,  glassNorm,  glassUV),
     waterGeom:  makeGeom(waterPos,  waterCol,  waterNorm,  waterUV),
+    boundingBox,
   };
 }
-
