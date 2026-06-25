@@ -4,11 +4,121 @@ import { buildChunkMesh } from './ChunkMesher.js';
 import { createAvatar, SteveAvatar } from '../../avatars/index.js';
 import { buildTextureAtlas } from '../world/TextureAtlas.js';
 
-const FOV_DEG           = 70;
+const FOV_DEG            = 70;
 const RENDER_DIST_BLOCKS = CHUNK_SIZE * 5;
 
 const CAM_DIST_BACK  = 4.0;
 const CAM_DIST_UP    = 1.6;
+
+// ── Shared AO vertex shader ───────────────────────────────────────────────
+// THREE.js built-in: position, normal, uv — qayta e'lon qilinmaydi.
+// color — ChunkMesher dan AO * shade * blockColor (RGB, 0..1).
+// vAO   — AO qiymati (color.r / baseColor.r dan ajratish o'rniga alohida kanal ishlatilsa
+//         yanada aniqroq bo'ladi, lekin hozir color ichida encoded).
+const AO_VERT = /* glsl */`
+  attribute vec3 color;
+  varying vec3  vColor;
+  varying vec2  vUv;
+  varying float vFogDist;
+
+  void main() {
+    vColor   = color;
+    vUv      = uv;
+    vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+    vFogDist   = -mvPos.z;
+    gl_Position = projectionMatrix * mvPos;
+  }
+`;
+
+// ── Shared AO fragment shader ─────────────────────────────────────────────
+// Tekstura * vertex color (AO + shade encoded).
+// Gamma correction (sRGB output): pow(x, 1/2.2).
+// Fog: linear, sky rangi bilan aralashtiriladi.
+const AO_FRAG = /* glsl */`
+  varying vec3  vColor;
+  varying vec2  vUv;
+  varying float vFogDist;
+
+  uniform sampler2D uAtlas;
+  uniform vec3      uFogColor;
+  uniform float     uFogNear;
+  uniform float     uFogFar;
+  uniform float     uOpacity;
+
+  void main() {
+    vec4 tex = texture2D(uAtlas, vUv);
+    if (tex.a < 0.1) discard;
+
+    // AO + shade vertex color bilan teksturani ko'paytirish
+    vec3 col = tex.rgb * vColor;
+
+    // Gamma correction — linear -> sRGB
+    col = pow(clamp(col, 0.0, 1.0), vec3(1.0 / 2.2));
+
+    // Linear fog
+    float fogFactor = clamp((vFogDist - uFogNear) / (uFogFar - uFogNear), 0.0, 1.0);
+    col = mix(col, uFogColor, fogFactor);
+
+    gl_FragColor = vec4(col, tex.a * uOpacity);
+  }
+`;
+
+// ── Water shader ──────────────────────────────────────────────────────────
+const WATER_VERT = /* glsl */`
+  attribute vec3 color;
+  varying vec3  vColor;
+  varying vec3  vWorldPos;
+  varying vec2  vUv;
+  uniform float uTime;
+
+  void main() {
+    vColor = color;
+    vUv    = uv;
+    vec3 pos = position;
+    // Yuqori yuzada to'lqin animatsiyasi
+    if (normal.y > 0.5) {
+      pos.y += sin(pos.x * 1.8 + uTime * 1.4) * 0.035;
+      pos.y += sin(pos.z * 2.2 + uTime * 1.1) * 0.025;
+    }
+    vWorldPos   = pos;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+  }
+`;
+
+const WATER_FRAG = /* glsl */`
+  varying vec3  vColor;
+  varying vec3  vWorldPos;
+  varying vec2  vUv;
+  uniform float     uTime;
+  uniform sampler2D uAtlas;
+  uniform vec3      uFogColor;
+  uniform float     uFogNear;
+  uniform float     uFogFar;
+
+  void main() {
+    float ripple = sin(vWorldPos.x * 3.0 + uTime * 2.0) * 0.04
+                 + sin(vWorldPos.z * 2.5 + uTime * 1.7) * 0.03;
+    vec4 tex = texture2D(uAtlas, vUv);
+    vec3 col = tex.rgb * vColor + vec3(ripple * 0.3, ripple * 0.5, ripple * 0.2);
+    col = pow(clamp(col, 0.0, 1.0), vec3(1.0 / 2.2));
+
+    // Fog
+    vec4 mvPos   = modelViewMatrix * vec4(vWorldPos, 1.0);
+    float fogDist   = -mvPos.z;
+    float fogFactor = clamp((fogDist - uFogNear) / (uFogFar - uFogNear), 0.0, 1.0);
+    col = mix(col, uFogColor, fogFactor);
+
+    gl_FragColor = vec4(col, 0.72);
+  }
+`;
+
+function makeFogUniforms(color, near, far) {
+  return {
+    uFogColor: { value: new THREE.Color(color) },
+    uFogNear:  { value: near },
+    uFogFar:   { value: far },
+  };
+}
 
 export class Renderer {
   constructor(canvas, world) {
@@ -27,7 +137,7 @@ export class Renderer {
     this.webgl = new THREE.WebGLRenderer({ canvas, antialias: false });
     this.webgl.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
-    // ── Lighting ──
+    // ── Lighting (ambient faqat — AO shaderda boshqariladi) ──
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.55));
     this.sun = new THREE.DirectionalLight(0xffffff, 0.85);
     this.sun.position.set(80, 150, 60);
@@ -39,72 +149,51 @@ export class Renderer {
     this.sunMesh  = new THREE.Mesh(sunGeom, sunMat);
     this.scene.add(this.sunMesh);
 
-    // ── TextureAtlas: pixel-art Minecraft teksturalar ──
-    // buildTextureAtlas() canvas orqali procedural 16x16 plitkalar yaratadi.
+    // ── TextureAtlas ──
     const atlas = buildTextureAtlas();
     this._atlasTexture = atlas.texture;
     this._getUV = atlas.getUV;
 
-    // ── Opaque material: TextureAtlas + vertex colors (AO uchun) ──
-    // vertexColors: THREE.VertexColors — vertex rangi bilan teksturani ko'paytiradi.
-    // map: atlas teksturasi — NearestFilter (pixel-art, blur yo'q).
-    this.opaqueMat = new THREE.MeshLambertMaterial({
-      map: this._atlasTexture,
-      vertexColors: true,
+    // ── Fog defaults ──
+    this._fogColor = 0x87ceeb;
+    this._fogNear  = 80;
+    this._fogFar   = 180;
+
+    // ── Opaque ShaderMaterial: AO + gamma + fog ──
+    this.opaqueMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uAtlas:  { value: this._atlasTexture },
+        uOpacity: { value: 1.0 },
+        ...makeFogUniforms(this._fogColor, this._fogNear, this._fogFar),
+      },
+      vertexShader:   AO_VERT,
+      fragmentShader: AO_FRAG,
     });
 
-    // ── Glass material: shaffof, atlas teksturasi ──
-    this.glassMat = new THREE.MeshLambertMaterial({
-      map: this._atlasTexture,
-      vertexColors: true,
+    // ── Glass ShaderMaterial: shaffof, AO ──
+    this.glassMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uAtlas:   { value: this._atlasTexture },
+        uOpacity: { value: 0.55 },
+        ...makeFogUniforms(this._fogColor, this._fogNear, this._fogFar),
+      },
+      vertexShader:   AO_VERT,
+      fragmentShader: AO_FRAG,
       transparent: true,
-      opacity: 0.55,
-      depthWrite: false,
+      depthWrite:  false,
     });
 
-    // ── Water ShaderMaterial — animatsion to'lqin + fresnel ──
+    // ── Water ShaderMaterial ──
     this.waterMat = new THREE.ShaderMaterial({
       transparent: true,
-      depthWrite: false,
+      depthWrite:  false,
       uniforms: {
-        uTime:    { value: 0 },
-        uAtlas:   { value: this._atlasTexture },
+        uTime:   { value: 0 },
+        uAtlas:  { value: this._atlasTexture },
+        ...makeFogUniforms(this._fogColor, this._fogNear, this._fogFar),
       },
-      vertexShader: /* glsl */`
-        attribute vec3 color;
-        varying vec3 vColor;
-        varying vec3 vWorldPos;
-        varying vec2 vUv;
-        uniform float uTime;
-
-        void main() {
-          vColor = color;
-          vUv = uv;
-          vec3 pos = position;
-          if (normal.y > 0.5) {
-            pos.y += sin(pos.x * 1.8 + uTime * 1.4) * 0.035;
-            pos.y += sin(pos.z * 2.2 + uTime * 1.1) * 0.025;
-          }
-          vWorldPos = pos;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
-        }
-      `,
-      fragmentShader: /* glsl */`
-        varying vec3 vColor;
-        varying vec3 vWorldPos;
-        varying vec2 vUv;
-        uniform float uTime;
-        uniform sampler2D uAtlas;
-
-        void main() {
-          float ripple = sin(vWorldPos.x * 3.0 + uTime * 2.0) * 0.04
-                       + sin(vWorldPos.z * 2.5 + uTime * 1.7) * 0.03;
-          vec4 texColor = texture2D(uAtlas, vUv);
-          vec3 col = texColor.rgb * vColor + vec3(ripple * 0.3, ripple * 0.5, ripple * 0.2);
-          col = clamp(col, 0.0, 1.0);
-          gl_FragColor = vec4(col, 0.72);
-        }
-      `,
+      vertexShader:   WATER_VERT,
+      fragmentShader: WATER_FRAG,
     });
 
     this.chunkMeshes = new Map();
@@ -124,7 +213,7 @@ export class Renderer {
     // ── Other players ──
     this._otherPlayerModels = new Map();
 
-    // ── View mode: 'first' | 'third' ──
+    // ── View mode ──
     this._viewMode = 'third';
 
     window.addEventListener('keydown', e => {
@@ -147,10 +236,10 @@ export class Renderer {
 
   screenPointToRay(clientX, clientY) {
     const rect = this.canvas.getBoundingClientRect();
-    const ndcX = ((clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
-    const ndcY = -(((clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1);
+    const ndcX = ((clientX - rect.left) / Math.max(1, rect.width))  * 2 - 1;
+    const ndcY = -(((clientY - rect.top)  / Math.max(1, rect.height)) * 2 - 1);
 
-    const far  = new THREE.Vector3(ndcX, ndcY, 0.5).unproject(this.camera);
+    const far    = new THREE.Vector3(ndcX, ndcY, 0.5).unproject(this.camera);
     const origin = this.camera.position.clone();
     const dir    = far.sub(origin).normalize();
     return {
@@ -177,12 +266,23 @@ export class Renderer {
       this.waterMat.uniforms.uTime.value += (dt || 0.016);
     }
 
+    // ── Fog & sky rangi: suv ichida / tashqarida ──
+    let fogColor, fogNear, fogFar;
     if (player.inWater) {
-      this.scene.background = new THREE.Color(0x123d6e);
-      this.scene.fog = new THREE.Fog(0x123d6e, 1.5, 14);
+      fogColor = 0x123d6e; fogNear = 1.5; fogFar = 14;
     } else {
-      this.scene.background = new THREE.Color(0x87ceeb);
-      this.scene.fog = new THREE.Fog(0x87ceeb, 80, 180);
+      fogColor = 0x87ceeb; fogNear = 80; fogFar = 180;
+    }
+
+    this.scene.background = new THREE.Color(fogColor);
+    this.scene.fog = new THREE.Fog(fogColor, fogNear, fogFar);
+
+    // Shader uniform larini yangilash
+    const fogVec = new THREE.Color(fogColor);
+    for (const mat of [this.opaqueMat, this.glassMat, this.waterMat]) {
+      mat.uniforms.uFogColor.value.copy(fogVec);
+      mat.uniforms.uFogNear.value  = fogNear;
+      mat.uniforms.uFogFar.value   = fogFar;
     }
 
     this.webgl.render(this.scene, this.camera);
@@ -278,7 +378,7 @@ export class Renderer {
       model.setGhost(isGhost);
 
       if (labelEl) {
-        const worldPos = new THREE.Vector3(cur.x, cur.y + 2.4, cur.z);
+        const worldPos  = new THREE.Vector3(cur.x, cur.y + 2.4, cur.z);
         const projected = worldPos.project(this.camera);
         if (projected.z < 1) {
           const hw = this.canvas.clientWidth  / 2;
