@@ -13,15 +13,18 @@ const CAM_DIST_UP    = 1.6;
 // ── Shared AO vertex shader ───────────────────────────────────────────────
 // THREE.js built-in: position, normal, uv — qayta e'lon qilinmaydi.
 // color — ChunkMesher dan AO * shade * blockColor (RGB, 0..1).
+// vNormal — fragment shaderda yuz (top/bottom/side) tipini aniqlash uchun.
 const AO_VERT = /* glsl */`
   attribute vec3 color;
   varying vec3  vColor;
   varying vec2  vUv;
   varying float vFogDist;
+  varying vec3  vNormal;
 
   void main() {
     vColor   = color;
     vUv      = uv;
+    vNormal  = normal;
     vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
     vFogDist   = -mvPos.z;
     gl_Position = projectionMatrix * mvPos;
@@ -32,16 +35,43 @@ const AO_VERT = /* glsl */`
 // Tekstura * vertex color (AO + shade encoded).
 // Gamma correction (sRGB output): pow(x, 1/2.2).
 // Fog: linear, sky rangi bilan aralashtiriladi.
+// applyFaceLighting: normal asosida top/bottom/side yuzasini aniqlab,
+//                    uAmbientOcclusionFactor orqali yorug'likni kamaytiradi.
 const AO_FRAG = /* glsl */`
   varying vec3  vColor;
   varying vec2  vUv;
   varying float vFogDist;
+  varying vec3  vNormal;
 
   uniform sampler2D uAtlas;
   uniform vec3      uFogColor;
   uniform float     uFogNear;
   uniform float     uFogFar;
   uniform float     uOpacity;
+  // Blok yuzalarining burchaklardagi yorug'ligini kamaytirish koeffitsiyenti.
+  // 0.0 = to'liq qorong'u burchaklar, 1.0 = AO ta'siri yo'q.
+  uniform float     uAmbientOcclusionFactor;
+
+  // Har bir yuz (top / bottom / side) uchun yorug'lik koeffitsiyentini hisoblaydi.
+  // normal.y > 0.5  → top    yuz: eng yorug' (1.0)
+  // normal.y < -0.5 → bottom yuz: eng qorong'u (0.8)
+  // aks holda       → side   yuz: o'rta yorug'lik (0.9)
+  // Natija uAmbientOcclusionFactor bilan interpolatsiya qilinadi:
+  //   factor = 1.0 → hech qanday qo'shimcha o'zgarish yo'q
+  //   factor = 0.0 → maksimal qorayish qo'llaniladi
+  float applyFaceLighting(vec3 n) {
+    float faceMult;
+    if (n.y > 0.5) {
+      faceMult = 1.0;          // top   — to'liq yorug'
+    } else if (n.y < -0.5) {
+      faceMult = 0.8;          // bottom — 20% qoraytirilgan
+    } else {
+      faceMult = 0.9;          // side   — 10% qoraytirilgan
+    }
+    // uAmbientOcclusionFactor = 1.0 → faceMult o'zgarishsiz
+    // uAmbientOcclusionFactor = 0.0 → faceMult to'liq kuchga kiradi
+    return mix(1.0, faceMult, uAmbientOcclusionFactor);
+  }
 
   void main() {
     vec4 tex = texture2D(uAtlas, vUv);
@@ -49,6 +79,9 @@ const AO_FRAG = /* glsl */`
 
     // AO + shade vertex color bilan teksturani ko'paytirish
     vec3 col = tex.rgb * vColor;
+
+    // Yuz yorug'ligini qo'llash: top/bottom/side ga qarab koeffitsiyent
+    col *= applyFaceLighting(vNormal);
 
     // Gamma correction — linear -> sRGB
     col = pow(clamp(col, 0.0, 1.0), vec3(1.0 / 2.2));
@@ -178,6 +211,9 @@ export class Renderer {
       uniforms: {
         uAtlas:  { value: this._atlasTexture },
         uOpacity: { value: 1.0 },
+        // Blok burchaklaridagi AO kuchini boshqaradi (0.0–1.0).
+        // 1.0 = hozirgi ko'rinish (ta'sir yo'q), 0.0 = to'liq qorong'u burchaklar.
+        uAmbientOcclusionFactor: { value: 1.0 },
         ...makeFogUniforms(this._fogColor, this._fogNear, this._fogFar),
       },
       vertexShader:   AO_VERT,
@@ -191,6 +227,8 @@ export class Renderer {
       uniforms: {
         uAtlas:   { value: this._atlasTexture },
         uOpacity: { value: 0.55 },
+        // Shisha uchun ham AO koeffitsiyenti (opaqueMat bilan bir xil mantiq).
+        uAmbientOcclusionFactor: { value: 1.0 },
         ...makeFogUniforms(this._fogColor, this._fogNear, this._fogFar),
       },
       vertexShader:   AO_VERT,

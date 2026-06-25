@@ -269,7 +269,15 @@ export function buildChunkMesh(chunk, world, fluid, getUV) {
           if (!colorHex) continue;
 
           const [r, g, b] = hexToRgb(colorHex);
-          const faceShade = face.shade;
+
+          // ── Qo'shni blok bo'lsa 10% to'qroq qil ──────────────────────────
+          // neighborId bu yuzaning to'g'ridan-to'g'ri qo'shnisi (FACES[fi].dir yo'nalishida).
+          // Agar u AIR bo'lmasa (ya'ni yonida biron blok bor), shade ni kamaytirish.
+          // Eslatma: shouldCull() allaqachon to'liq qattiq qo'shnilarni yashiradi —
+          // bu shart faqat shaffof qo'shnilar (glass, leaves, water) uchun ishlaydi.
+          const neighborDim = (neighborId !== BLOCK_AIR) ? 0.9 : 1.0;
+
+          const faceShade = face.shade * neighborDim;
           const aoVals = faceAO(wx, ly, wz, fi, getNeighbor);
           const [u0, v0, u1, v1] = uvFn(id, face.face);
 
