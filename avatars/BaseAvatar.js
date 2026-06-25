@@ -1,5 +1,8 @@
 import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Shared utility helpers
+// ─────────────────────────────────────────────────────────────────────────────
 function mat(hex) {
   return new THREE.MeshLambertMaterial({ color: hex });
 }
@@ -10,6 +13,22 @@ function box(w, h, d, color, px = 0, py = 0, pz = 0) {
   return mesh;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Color config (C) shape expected by BaseAvatar
+// ─────────────────────────────────────────────────────────────────────────────
+//  skin, skinDark          – face / body skin tones
+//  hair, hairMid           – hair colors (dark base, mid highlight)
+//  eyeWhite, eyePupil, eyeBrow
+//  beard                   – lip / facial accent (can equal skinDark for no-beard look)
+//  shirt, shirtDark        – top / shirt front and sides
+//  pants, pantsDark        – trousers
+//  boot, bootDark          – footwear
+//  armSkin, armShad        – forearm skin (defaults to skin/skinDark)
+//
+//  opts (optional):
+//    slimArms : boolean  — Alex-style 3px-wide arms
+//    hairLength : 'short' | 'normal' | 'long'  — adds extra lower hair pieces
+// ─────────────────────────────────────────────────────────────────────────────
 export class BaseAvatar {
   constructor(scene, C, opts = {}) {
     this.scene = scene;
@@ -27,15 +46,18 @@ export class BaseAvatar {
     this._buildLegs();
   }
 
+  // ── HEAD ──────────────────────────────────────────────────────────────────
   _buildHead() {
     const C = this._C;
     this.headPivot = new THREE.Group();
     this.headPivot.position.y = 1.55;
     this.root.add(this.headPivot);
 
+    // Base skull
     const head = box(0.5, 0.5, 0.5, C.skin);
     this.headPivot.add(head);
 
+    // ── Hair ──
     const hairTop  = box(0.52, 0.08, 0.52, C.hair,    0,     0.27,  0);
     const hairBack = box(0.52, 0.44, 0.06, C.hair,    0,     0.02, -0.27);
     this.headPivot.add(hairTop, hairBack);
@@ -46,52 +68,64 @@ export class BaseAvatar {
     const hairR = box(0.06, sideH, 0.52, C.hairMid,  0.27, sideY, 0);
     this.headPivot.add(hairL, hairR);
 
+    // Front forehead fringe
     const hairFront = box(0.52, 0.10, 0.04, C.hairMid, 0, 0.18, 0.26);
     this.headPivot.add(hairFront);
 
-    // ─── UZUN SOCH (Alex) — faqat yon tomonlar, orqa qismi YO‘Q ───
+    // Extra lower pieces for long hair (Alex, Kai, etc.)
     if (this._opts.hairLength === 'long') {
-      const llL = box(0.08, 0.20, 0.50, C.hair, -0.28, -0.08, 0);
-      const llR = box(0.08, 0.20, 0.50, C.hair,  0.28, -0.08, 0);
-      this.headPivot.add(llL, llR);
+      const llL = box(0.08, 0.20, 0.50, C.hair, -0.28, -0.28, 0);
+      const llR = box(0.08, 0.20, 0.50, C.hair,  0.28, -0.28, 0);
+      const llB = box(0.52, 0.20, 0.08, C.hair,  0,    -0.28, -0.28);
+      this.headPivot.add(llL, llR, llB);
     }
 
+    // ── Face ──
+
+    // Eyes – white
     const eyeGW = new THREE.BoxGeometry(0.13, 0.10, 0.02);
     const eyeMW = mat(C.eyeWhite ?? 0xffffff);
     const eyeL = new THREE.Mesh(eyeGW, eyeMW); eyeL.position.set(-0.11, 0.07, 0.251);
     const eyeR = new THREE.Mesh(eyeGW, eyeMW); eyeR.position.set( 0.11, 0.07, 0.251);
     this.headPivot.add(eyeL, eyeR);
 
+    // Eyes – coloured pupil
     const eyeGP = new THREE.BoxGeometry(0.07, 0.07, 0.022);
     const eyeMP = mat(C.eyePupil);
     const pupilL = new THREE.Mesh(eyeGP, eyeMP); pupilL.position.set(-0.11, 0.07, 0.252);
     const pupilR = new THREE.Mesh(eyeGP, eyeMP); pupilR.position.set( 0.11, 0.07, 0.252);
     this.headPivot.add(pupilL, pupilR);
 
+    // Eyebrows
     const browG = new THREE.BoxGeometry(0.15, 0.04, 0.022);
     const browM = mat(C.eyeBrow ?? 0x2a1800);
     const browL = new THREE.Mesh(browG, browM); browL.position.set(-0.11, 0.135, 0.252);
     const browR = new THREE.Mesh(browG, browM); browR.position.set( 0.11, 0.135, 0.252);
     this.headPivot.add(browL, browR);
 
+    // Nose
     const nose = box(0.06, 0.08, 0.04, C.skinDark, 0, -0.02, 0.265);
     this.headPivot.add(nose);
 
+    // Mouth / lip accent
     const mouth  = box(0.16, 0.04, 0.022, C.beard ?? C.skinDark, 0, -0.10, 0.252);
     const beard1 = box(0.20, 0.06, 0.022, C.beard ?? C.skinDark, 0, -0.15, 0.252);
     this.headPivot.add(mouth, beard1);
 
+    // Cheek shading
     const cheekL = box(0.04, 0.10, 0.06, C.skinDark, -0.24, -0.02, 0.22);
     const cheekR = box(0.04, 0.10, 0.06, C.skinDark,  0.24, -0.02, 0.22);
     this.headPivot.add(cheekL, cheekR);
 
+    // Side shading strips
     const sideL2 = box(0.02, 0.50, 0.50, C.skinDark, -0.25, 0, 0);
     const sideR2 = box(0.02, 0.50, 0.50, C.skinDark,  0.25, 0, 0);
     this.headPivot.add(sideL2, sideR2);
 
-    this.head = this.headPivot;
+    this.head = this.headPivot; // alias for external access
   }
 
+  // ── BODY ──────────────────────────────────────────────────────────────────
   _buildBody() {
     const C = this._C;
     this.bodyGroup = new THREE.Group();
@@ -106,24 +140,28 @@ export class BaseAvatar {
     const back  = box(0.46, 0.60, 0.02, C.shirtDark,  0, 0, -0.14);
     this.bodyGroup.add(sideL, sideR, back);
 
+    // Belt / waist strip
     const belt = box(0.47, 0.07, 0.28, C.pantsDark, 0, -0.27, 0);
     this.bodyGroup.add(belt);
 
     this.body = this.bodyGroup;
   }
 
+  // ── ARMS ──────────────────────────────────────────────────────────────────
   _buildArms() {
     const C    = this._C;
     const slim = this._opts.slimArms;
-    // ─── MOJANG: keng qo‘l 0.25, yupqa qo‘l 0.18 ───
-    const armW = slim ? 0.18 : 0.25;
+    const armW = slim ? 0.18 : 0.22;
     const armH = 0.58;
-    const armD = slim ? 0.18 : 0.25;
+    const armD = slim ? 0.18 : 0.22;
     const armSkin = C.armSkin ?? C.skin;
     const armShad = C.armShad ?? C.skinDark;
 
+    // Body is 0.46 wide → half = 0.23. Arm pivot sits flush against body side.
+    // Pivot is at shoulder top; everything hangs DOWN (negative Y offsets).
     const shoulderX = 0.23 + armW / 2;
 
+    // ── Right arm (player's right = -x) ──
     this.rightArmPivot = new THREE.Group();
     this.rightArmPivot.position.set(-shoulderX, 1.28, 0);
     this.root.add(this.rightArmPivot);
@@ -134,6 +172,7 @@ export class BaseAvatar {
     const rHand    = box(armW, 0.10,        armD + 0.02, armSkin,  0,        -armH - 0.05,                     0);
     this.rightArmPivot.add(rSleeve, rArm, rArmSide, rHand);
 
+    // ── Left arm (+x) ──
     this.leftArmPivot = new THREE.Group();
     this.leftArmPivot.position.set(shoulderX, 1.28, 0);
     this.root.add(this.leftArmPivot);
@@ -145,10 +184,12 @@ export class BaseAvatar {
     this.leftArmPivot.add(lSleeve, lArm, lArmSide, lHand);
   }
 
+  // ── LEGS ──────────────────────────────────────────────────────────────────
   _buildLegs() {
     const C = this._C;
     const legW = 0.22, legH = 0.58, legD = 0.22;
 
+    // Right leg (-x)
     this.rightLegPivot = new THREE.Group();
     this.rightLegPivot.position.set(-0.115, 0.74, 0);
     this.root.add(this.rightLegPivot);
@@ -159,6 +200,7 @@ export class BaseAvatar {
     const rBootSide= box(0.02, 0.15, legD + 0.04,  C.bootDark,  -legW / 2, -legH + 0.05,  0.01);
     this.rightLegPivot.add(rLeg, rLegSide, rBoot, rBootSide);
 
+    // Left leg (+x)
     this.leftLegPivot = new THREE.Group();
     this.leftLegPivot.position.set(0.115, 0.74, 0);
     this.root.add(this.leftLegPivot);
@@ -170,6 +212,7 @@ export class BaseAvatar {
     this.leftLegPivot.add(lLeg, lLegSide, lBoot, lBootSide);
   }
 
+  // ── UPDATE (per frame) ───────────────────────────────────────────────────
   update(x, y, z, yaw, moving, dt) {
     this.root.position.set(x, y, z);
     this.root.rotation.y = yaw + Math.PI;
@@ -198,12 +241,20 @@ export class BaseAvatar {
 
   setVisible(v) { this.root.visible = v; }
 
+  /**
+   * Ghost effect: boshqa o'yinchi tab'ni yashirgan (yoki uzoq vaqt
+   * harakatsiz) bo'lsa, modelni yarim shaffof va oqartirilgan rangda
+   * ko'rsatamiz. Original ranglar bir martalik keshlanadi, shu sababli
+   * oldingi holatga to'liq aniq qaytarish mumkin.
+   */
   setGhost(isGhost) {
-    if (this._isGhost === !!isGhost) return;
+    if (this._isGhost === !!isGhost) return; // hech narsa o'zgarmadi
     this._isGhost = !!isGhost;
+
     this.root.traverse(obj => {
       const mat = obj.material;
       if (!obj.isMesh || !mat) return;
+
       if (!obj.userData._ghostOrig) {
         obj.userData._ghostOrig = {
           color:       mat.color ? mat.color.clone() : null,
@@ -212,6 +263,7 @@ export class BaseAvatar {
         };
       }
       const orig = obj.userData._ghostOrig;
+
       if (this._isGhost) {
         mat.transparent = true;
         mat.opacity = 0.35;

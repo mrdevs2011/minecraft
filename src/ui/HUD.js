@@ -28,15 +28,13 @@ export class HUD {
       const slot = document.createElement('div');
       slot.className = 'hotbar-slot' + (i === 0 ? ' active' : '');
       slot.id = `hotbar-slot-${i}`;
-      // Mojang uslubi: toʻq jigarrang fon
-      slot.style.background = 'rgba(40, 30, 20, 0.85)';
-      slot.style.border = '2px solid #666';
       hotbar.appendChild(slot);
     }
   }
 
   _buildViewIndicator() {
     const debug = document.getElementById('debug-info');
+    // Add F5 hint below debug — created once
     if (!document.getElementById('view-hint')) {
       const hint = document.createElement('div');
       hint.id = 'view-hint';
@@ -47,6 +45,7 @@ export class HUD {
   }
 
   _buildClock() {
+    // Create clock element if not already in DOM
     if (document.getElementById('game-clock')) return;
     const clock = document.createElement('div');
     clock.id = 'game-clock';
@@ -88,7 +87,6 @@ export class HUD {
       const slot = document.getElementById(`hotbar-slot-${i}`);
       if (!slot) continue;
       slot.classList.toggle('active', i === p.hotbarSlot);
-      slot.style.borderColor = i === p.hotbarSlot ? '#fff' : '#666';
       const item = p.inventory[i];
       if (item) {
         const def = getBlock(item.id);
@@ -101,13 +99,13 @@ export class HUD {
         })();
         count.textContent = item.count;
       } else {
-        slot.style.background = 'rgba(40,30,20,0.85)';
+        slot.style.background = 'rgba(0,0,0,0.5)';
         const count = slot.querySelector('.count');
         if (count) count.textContent = '';
       }
     }
 
-    // Health — Mojang ikonkalari (❤️, 💔, 🖤)
+    // Health
     const healthBar = document.getElementById('health-bar');
     healthBar.innerHTML = '';
     for (let i = 0; i < 10; i++) {
@@ -119,7 +117,7 @@ export class HUD {
       healthBar.appendChild(heart);
     }
 
-    // Hunger — Mojang ikonkalari (🍗, 🍖, ⚪)
+    // Hunger
     const hungerBar = document.getElementById('hunger-bar');
     hungerBar.innerHTML = '';
     for (let i = 9; i >= 0; i--) {
