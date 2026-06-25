@@ -1,16 +1,16 @@
 import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
 import { CHUNK_SIZE, CHUNK_HEIGHT } from '../world/Chunk.js';
-import { getBlock, BLOCK_AIR, BLOCK_WATER } from '../world/Blocks.js';
+import { getBlock, BLOCK_AIR, BLOCK_WATER, BLOCK_GLASS } from '../world/Blocks.js';
 import { FLUID_MAX } from '../world/FluidSimulator.js';
 
-// Face definitions
+// Face definitions — dir, corners, face name, AO shade multiplier
 const FACES = [
-  { dir: [1, 0, 0],  corners: [[1,0,0],[1,1,0],[1,1,1],[1,0,1]], shade: 0.75 },
-  { dir: [-1, 0, 0], corners: [[0,0,1],[0,1,1],[0,1,0],[0,0,0]], shade: 0.70 },
-  { dir: [0, 1, 0],  corners: [[0,1,0],[0,1,1],[1,1,1],[1,1,0]], shade: 1.0, face: 'top' },
-  { dir: [0, -1, 0], corners: [[0,0,1],[0,0,0],[1,0,0],[1,0,1]], shade: 0.5, face: 'bottom' },
-  { dir: [0, 0, 1],  corners: [[0,0,1],[1,0,1],[1,1,1],[0,1,1]], shade: 0.85 },
-  { dir: [0, 0, -1], corners: [[1,0,0],[0,0,0],[0,1,0],[1,1,0]], shade: 0.60 },
+  { dir: [1, 0, 0],  corners: [[1,0,0],[1,1,0],[1,1,1],[1,0,1]], shade: 0.75, face: 'side' },
+  { dir: [-1, 0, 0], corners: [[0,0,1],[0,1,1],[0,1,0],[0,0,0]], shade: 0.70, face: 'side' },
+  { dir: [0, 1, 0],  corners: [[0,1,0],[0,1,1],[1,1,1],[1,1,0]], shade: 1.0,  face: 'top' },
+  { dir: [0, -1, 0], corners: [[0,0,1],[0,0,0],[1,0,0],[1,0,1]], shade: 0.5,  face: 'bottom' },
+  { dir: [0, 0, 1],  corners: [[0,0,1],[1,0,1],[1,1,1],[0,1,1]], shade: 0.85, face: 'side' },
+  { dir: [0, 0, -1], corners: [[1,0,0],[0,0,0],[0,1,0],[1,1,0]], shade: 0.60, face: 'side' },
 ];
 
 function hexToRgb(hex) {
@@ -20,72 +20,130 @@ function hexToRgb(hex) {
   return [r, g, b];
 }
 
-/**
- * Suv bloki uchun yuqori yuz balandligini level dan hisoblash.
- * level 8 (to'liq) → y offset = 1.0 (to'liq blok)
- * level 1 (soy)    → y offset = 0.125 (1/8 blok)
- * Bu mesh da suv sirti pastroq ko'rinadi — vizual daraja effekti.
- */
 function waterTopY(level) {
-  // 0.125 (1/8) dan 1.0 gacha — 8 ta daraja
-  // Lekin juda ko'zga tashlanmasin deb 0.875 bilan cheklaymiz (level 8 uchun)
   return Math.max(0.125, (level / FLUID_MAX) * 0.94);
 }
 
-/**
- * Suv bloki uchun to'rtta yuqori burchak balandligini hisoblash.
- * Qo'shni bloklarning level ini hisobga olib,
- * har bir burchakni o'rtacha daraja bilan belgilaydi.
- * Bu "smooth" suv sirti beradi (Minecraft kabi).
- *
- * corners: [x0z0, x0z1, x1z1, x1z0] — ChunkMesher face +Y corners tartibida
- */
 function waterCornerHeights(wx, wy, wz, fluid) {
-  // To'rtta burchak uchun qo'shni bloklar:
-  // (wx,   wy, wz  ), (wx,   wy, wz+1), (wx+1, wy, wz+1), (wx+1, wy, wz  )
-  // Har burchak — 4 ta blok o'rtachasi (diagonal ham)
   const getL = (x, z) => {
     const lv = fluid.getLevel(x, wy, z);
-    // Agar bu yerda suv yo'q lekin ustida suv bor — bu "to'lib turgan" blok
     if (lv === 0 && fluid.getLevel(x, wy+1, z) > 0) return FLUID_MAX;
     return lv;
   };
-
   const l00 = getL(wx,   wz  );
   const l10 = getL(wx+1, wz  );
   const l01 = getL(wx,   wz+1);
   const l11 = getL(wx+1, wz+1);
 
-  // Burchak = 4 ta qo'shni blok o'rtachasi
-  // (faqat suvli bloklarni hisobga olish — 0 lar o'rtachani pasaytiradi)
   const avgCorner = (a, b, c, d) => {
     const vals = [a, b, c, d].filter(v => v > 0);
     if (vals.length === 0) return FLUID_MAX;
     return vals.reduce((s, v) => s + v, 0) / vals.length;
   };
 
-  // +Y face corners tartibida: [0,1,0],[0,1,1],[1,1,1],[1,1,0]
-  //   burchak (wx,   wz  ) → l00, l10-1, l01-1, l00 (markazga eng yaqin)
-  // Soddalashtirilgan: har burchak o'zi + 3 qo'shni o'rtachasi
   return [
-    waterTopY(avgCorner(l00, l10, l01, getL(wx,   wz  ))),  // (0,0) burchak
-    waterTopY(avgCorner(l00, l01, l01, getL(wx,   wz+1))),  // (0,1) burchak
-    waterTopY(avgCorner(l10, l11, l01, getL(wx+1, wz+1))),  // (1,1) burchak
-    waterTopY(avgCorner(l10, l11, l00, getL(wx+1, wz  ))),  // (1,0) burchak
+    waterTopY(avgCorner(l00, l10, l01, getL(wx,   wz  ))),
+    waterTopY(avgCorner(l00, l01, l01, getL(wx,   wz+1))),
+    waterTopY(avgCorner(l10, l11, l01, getL(wx+1, wz+1))),
+    waterTopY(avgCorner(l10, l11, l00, getL(wx+1, wz  ))),
   ];
 }
 
+// ── Ambient Occlusion: burchakdagi qo'shni bloklar soniga qarab qoralashtirish ──
+// side1, side2 — burchakka yondosh 2 ta blok, corner — diagonal blok
+// Returns: 0.0 (to'liq qoraygan) .. 1.0 (yorug')
+function calcAO(side1, side2, corner) {
+  if (side1 && side2) return 0.0;
+  return 1.0 - ([side1, side2, corner].filter(Boolean).length) * 0.25;
+}
+
+// Face uchun 4 ta burchak AO qiymatlarini hisoblash
+// faceIdx: 0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z
+function faceAO(wx, wy, wz, faceIdx, world) {
+  const isSolid = (x, y, z) => {
+    const id = world.getBlock(x, y, z);
+    if (id === BLOCK_AIR) return false;
+    const def = getBlock(id);
+    return def.solid && !def.transparent;
+  };
+
+  // corners tartibida face.corners bilan mos kelishi kerak
+  // Har bir face uchun qaysi qo'shni bloklarni tekshirish kerakligini aniqlash
+  let aoValues = [1, 1, 1, 1]; // default: yorug'
+
+  switch (faceIdx) {
+    case 2: { // +Y (top face) — corners: [0,1,0],[0,1,1],[1,1,1],[1,1,0]
+      const y = wy + 1;
+      // corner 0: (wx, y, wz)
+      aoValues[0] = calcAO(isSolid(wx-1,y,wz), isSolid(wx,y,wz-1), isSolid(wx-1,y,wz-1));
+      // corner 1: (wx, y, wz+1)
+      aoValues[1] = calcAO(isSolid(wx-1,y,wz), isSolid(wx,y,wz+1), isSolid(wx-1,y,wz+1));
+      // corner 2: (wx+1, y, wz+1)
+      aoValues[2] = calcAO(isSolid(wx+1,y,wz), isSolid(wx,y,wz+1), isSolid(wx+1,y,wz+1));
+      // corner 3: (wx+1, y, wz)
+      aoValues[3] = calcAO(isSolid(wx+1,y,wz), isSolid(wx,y,wz-1), isSolid(wx+1,y,wz-1));
+      break;
+    }
+    case 3: { // -Y (bottom face) — corners: [0,0,1],[0,0,0],[1,0,0],[1,0,1]
+      const y = wy - 1;
+      aoValues[0] = calcAO(isSolid(wx-1,y,wz), isSolid(wx,y,wz+1), isSolid(wx-1,y,wz+1));
+      aoValues[1] = calcAO(isSolid(wx-1,y,wz), isSolid(wx,y,wz-1), isSolid(wx-1,y,wz-1));
+      aoValues[2] = calcAO(isSolid(wx+1,y,wz), isSolid(wx,y,wz-1), isSolid(wx+1,y,wz-1));
+      aoValues[3] = calcAO(isSolid(wx+1,y,wz), isSolid(wx,y,wz+1), isSolid(wx+1,y,wz+1));
+      break;
+    }
+    case 0: { // +X face — corners: [1,0,0],[1,1,0],[1,1,1],[1,0,1]
+      const x = wx + 1;
+      aoValues[0] = calcAO(isSolid(x,wy-1,wz), isSolid(x,wy,wz-1), isSolid(x,wy-1,wz-1));
+      aoValues[1] = calcAO(isSolid(x,wy+1,wz), isSolid(x,wy,wz-1), isSolid(x,wy+1,wz-1));
+      aoValues[2] = calcAO(isSolid(x,wy+1,wz), isSolid(x,wy,wz+1), isSolid(x,wy+1,wz+1));
+      aoValues[3] = calcAO(isSolid(x,wy-1,wz), isSolid(x,wy,wz+1), isSolid(x,wy-1,wz+1));
+      break;
+    }
+    case 1: { // -X face — corners: [0,0,1],[0,1,1],[0,1,0],[0,0,0]
+      const x = wx - 1;
+      aoValues[0] = calcAO(isSolid(x,wy-1,wz), isSolid(x,wy,wz+1), isSolid(x,wy-1,wz+1));
+      aoValues[1] = calcAO(isSolid(x,wy+1,wz), isSolid(x,wy,wz+1), isSolid(x,wy+1,wz+1));
+      aoValues[2] = calcAO(isSolid(x,wy+1,wz), isSolid(x,wy,wz-1), isSolid(x,wy+1,wz-1));
+      aoValues[3] = calcAO(isSolid(x,wy-1,wz), isSolid(x,wy,wz-1), isSolid(x,wy-1,wz-1));
+      break;
+    }
+    case 4: { // +Z face — corners: [0,0,1],[1,0,1],[1,1,1],[0,1,1]
+      const z = wz + 1;
+      aoValues[0] = calcAO(isSolid(wx-1,wy,z), isSolid(wx,wy-1,z), isSolid(wx-1,wy-1,z));
+      aoValues[1] = calcAO(isSolid(wx+1,wy,z), isSolid(wx,wy-1,z), isSolid(wx+1,wy-1,z));
+      aoValues[2] = calcAO(isSolid(wx+1,wy,z), isSolid(wx,wy+1,z), isSolid(wx+1,wy+1,z));
+      aoValues[3] = calcAO(isSolid(wx-1,wy,z), isSolid(wx,wy+1,z), isSolid(wx-1,wy+1,z));
+      break;
+    }
+    case 5: { // -Z face — corners: [1,0,0],[0,0,0],[0,1,0],[1,1,0]
+      const z = wz - 1;
+      aoValues[0] = calcAO(isSolid(wx+1,wy,z), isSolid(wx,wy-1,z), isSolid(wx+1,wy-1,z));
+      aoValues[1] = calcAO(isSolid(wx-1,wy,z), isSolid(wx,wy-1,z), isSolid(wx-1,wy-1,z));
+      aoValues[2] = calcAO(isSolid(wx-1,wy,z), isSolid(wx,wy+1,z), isSolid(wx-1,wy+1,z));
+      aoValues[3] = calcAO(isSolid(wx+1,wy,z), isSolid(wx,wy+1,z), isSolid(wx+1,wy+1,z));
+      break;
+    }
+  }
+  return aoValues;
+}
+
 /**
- * Chunk mesh qurish.
+ * Chunk mesh qurish — TextureAtlas UV + Ambient Occlusion.
  * fluid parametri — World.fluid (FluidSimulator instance).
+ * getUV — TextureAtlas.getUV(blockId, faceName) funksiyasi.
  * Returns { opaqueGeom, waterGeom }
  */
-export function buildChunkMesh(chunk, world, fluid) {
+export function buildChunkMesh(chunk, world, fluid, getUV) {
   const wx0 = chunk.worldX();
   const wz0 = chunk.worldZ();
 
-  const opaquePos = [], opaqueCol = [], opaqueNorm = [];
-  const waterPos  = [], waterCol  = [], waterNorm  = [];
+  const opaquePos  = [], opaqueCol  = [], opaqueNorm  = [], opaqueUV  = [];
+  const glassPos   = [], glassCol   = [], glassNorm   = [], glassUV   = [];
+  const waterPos   = [], waterCol   = [], waterNorm   = [], waterUV   = [];
+
+  // Fallback getUV agar TextureAtlas hali yuklanmagan bo'lsa
+  const uvFn = getUV || (() => [0, 0, 1, 1]);
 
   for (let lx = 0; lx < CHUNK_SIZE; lx++) {
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
@@ -95,17 +153,16 @@ export function buildChunkMesh(chunk, world, fluid) {
         const def = getBlock(id);
         const isWater = id === BLOCK_WATER;
 
-        // Suv darajasi — render uchun
         const wx = wx0 + lx;
         const wz = wz0 + lz;
         const fluidLv = isWater && fluid ? (fluid.getLevel(wx, ly, wz) || FLUID_MAX) : FLUID_MAX;
 
-        // Suv ustida ham suv bormi? (to'lib turgan blok)
         const waterAbove = isWater && fluid && (
           world.getBlock(wx, ly+1, wz) === BLOCK_WATER
         );
 
-        for (const face of FACES) {
+        for (let fi = 0; fi < FACES.length; fi++) {
+          const face = FACES[fi];
           const nx = lx + face.dir[0];
           const ny = ly + face.dir[1];
           const nz = lz + face.dir[2];
@@ -116,72 +173,106 @@ export function buildChunkMesh(chunk, world, fluid) {
 
           const neighborDef = getBlock(neighborId);
 
-          // Yashirin face larni o'tkazib yuborish
           if (neighborId !== BLOCK_AIR && neighborDef.solid && !neighborDef.transparent && !isWater) continue;
           if (isWater && neighborId === id) continue;
-
-          // Suv uchun: ustida suv bo'lsa yuqori face ni yashirish
           if (isWater && face.face === 'top' && waterAbove) continue;
 
+          // ── Rang: vertex colors (AO uchun ham ishlatiladi) ──
           const colorHex = face.face === 'top'    ? (def.color.top    || def.color.side)
                          : face.face === 'bottom' ? (def.color.bottom || def.color.side)
                          : def.color.side;
           if (!colorHex) continue;
 
           const [r, g, b] = hexToRgb(colorHex);
-          const shaded = [r * face.shade, g * face.shade, b * face.shade];
+          const faceShade = face.shade;
 
-          const pos  = isWater ? waterPos  : opaquePos;
-          const col  = isWater ? waterCol  : opaqueCol;
-          const norm = isWater ? waterNorm : opaqueNorm;
+          // ── Ambient Occlusion: har bir burchak uchun ──
+          const aoVals = faceAO(wx, ly, wz, fi, world);
+
+          // ── UV koordinatlar ──
+          const [u0, v0, u1, v1] = uvFn(id, face.face);
+
+          const isGlass = id === BLOCK_GLASS;
+          const pos  = isWater ? waterPos  : (isGlass ? glassPos  : opaquePos);
+          const col  = isWater ? waterCol  : (isGlass ? glassCol  : opaqueCol);
+          const norm = isWater ? waterNorm : (isGlass ? glassNorm : opaqueNorm);
+          const uv   = isWater ? waterUV   : (isGlass ? glassUV   : opaqueUV);
 
           const baseX = wx;
           const baseY = ly;
           const baseZ = wz;
 
-          // ── Suv yuqori sirti: daraja bo'yicha burchak balandliklari ──────
           if (isWater && face.face === 'top' && fluid) {
-            // 4 burchak balandligi (smooth suv sirti)
+            // Suv yuqori sirti: daraja bo'yicha burchak balandliklari
             const [h00, h01, h11, h10] = waterCornerHeights(wx, ly, wz, fluid);
-            // face.corners tartibida: [0,1,0],[0,1,1],[1,1,1],[1,1,0]
             const topCorners = [
               [0, h00, 0],
               [0, h01, 1],
               [1, h11, 1],
               [1, h10, 0],
             ];
-            // Ikki uchburchak
             const quad = [topCorners[0], topCorners[1], topCorners[2],
                           topCorners[0], topCorners[2], topCorners[3]];
-            for (const c of quad) {
+            const aoQuad = [aoVals[0], aoVals[1], aoVals[2], aoVals[0], aoVals[2], aoVals[3]];
+            const uvQuad = [
+              [u0, v1], [u0, v0], [u1, v0],
+              [u0, v1], [u1, v0], [u1, v1],
+            ];
+            for (let qi = 0; qi < 6; qi++) {
+              const c = quad[qi];
+              const ao = aoQuad[qi];
+              const s = faceShade * ao;
               pos.push(baseX + c[0], baseY + c[1], baseZ + c[2]);
-              col.push(shaded[0], shaded[1], shaded[2]);
+              col.push(r * s, g * s, b * s);
               norm.push(0, 1, 0);
+              uv.push(uvQuad[qi][0], uvQuad[qi][1]);
             }
           } else if (isWater && face.face !== 'top' && face.face !== 'bottom') {
-            // Yon face lar: yuqori qismi fluidLv ga qarab qisqartiriladi
+            // Suv yon face lari
             const topH = waterAbove ? 1.0 : waterTopY(fluidLv);
-            // face.corners: masalan +X: [[1,0,0],[1,1,0],[1,1,1],[1,0,1]]
-            // Y=1 ni topH bilan almashtirish
             const c = face.corners;
             const adjustedCorners = c.map(([cx,cy,cz]) => [cx, cy === 1 ? topH : 0, cz]);
             const quad = [
               adjustedCorners[0], adjustedCorners[1], adjustedCorners[2],
               adjustedCorners[0], adjustedCorners[2], adjustedCorners[3],
             ];
-            for (const corner of quad) {
+            const aoQuad = [aoVals[0], aoVals[1], aoVals[2], aoVals[0], aoVals[2], aoVals[3]];
+            const uvQuad = [
+              [u0, v1], [u0, v0], [u1, v0],
+              [u0, v1], [u1, v0], [u1, v1],
+            ];
+            for (let qi = 0; qi < 6; qi++) {
+              const corner = quad[qi];
+              const ao = aoQuad[qi];
+              const s = faceShade * ao;
               pos.push(baseX + corner[0], baseY + corner[1], baseZ + corner[2]);
-              col.push(shaded[0], shaded[1], shaded[2]);
+              col.push(r * s, g * s, b * s);
               norm.push(face.dir[0], face.dir[1], face.dir[2]);
+              uv.push(uvQuad[qi][0], uvQuad[qi][1]);
             }
           } else {
-            // Oddiy bloklar (va suv tagi)
+            // Oddiy bloklar
             const c = face.corners;
-            const quad = [c[0], c[1], c[2], c[0], c[2], c[3]];
-            for (const corner of quad) {
+            // ── AO quad-flip: diagonal yo'nalishini AO ga qarab tanlash ──
+            // ao[0]+ao[2] vs ao[1]+ao[3] — kichikrog'i bo'yicha flip qilinadi
+            const flip = (aoVals[0] + aoVals[2]) < (aoVals[1] + aoVals[3]);
+            const quadIdx = flip ? [1, 2, 3, 1, 3, 0] : [0, 1, 2, 0, 2, 3];
+            const aoQuad  = flip
+              ? [aoVals[1], aoVals[2], aoVals[3], aoVals[1], aoVals[3], aoVals[0]]
+              : [aoVals[0], aoVals[1], aoVals[2], aoVals[0], aoVals[2], aoVals[3]];
+            const uvCorners = [
+              [u0, v1], [u0, v0], [u1, v0], [u1, v1],
+            ];
+
+            for (let qi = 0; qi < 6; qi++) {
+              const ci = quadIdx[qi];
+              const corner = c[ci];
+              const ao = aoQuad[qi];
+              const s = faceShade * ao;
               pos.push(baseX + corner[0], baseY + corner[1], baseZ + corner[2]);
-              col.push(shaded[0], shaded[1], shaded[2]);
+              col.push(r * s, g * s, b * s);
               norm.push(face.dir[0], face.dir[1], face.dir[2]);
+              uv.push(uvCorners[ci][0], uvCorners[ci][1]);
             }
           }
         }
@@ -189,17 +280,19 @@ export function buildChunkMesh(chunk, world, fluid) {
     }
   }
 
-  const makeGeom = (pos, col, norm) => {
+  const makeGeom = (pos, col, norm, uvArr) => {
     if (pos.length === 0) return null;
     const geom = new THREE.BufferGeometry();
     geom.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geom.setAttribute('color',    new THREE.Float32BufferAttribute(col, 3));
     geom.setAttribute('normal',   new THREE.Float32BufferAttribute(norm, 3));
+    geom.setAttribute('uv',       new THREE.Float32BufferAttribute(uvArr, 2));
     return geom;
   };
 
   return {
-    opaqueGeom: makeGeom(opaquePos, opaqueCol, opaqueNorm),
-    waterGeom:  makeGeom(waterPos,  waterCol,  waterNorm),
+    opaqueGeom: makeGeom(opaquePos, opaqueCol, opaqueNorm, opaqueUV),
+    glassGeom:  makeGeom(glassPos,  glassCol,  glassNorm,  glassUV),
+    waterGeom:  makeGeom(waterPos,  waterCol,  waterNorm,  waterUV),
   };
 }
