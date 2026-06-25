@@ -42,6 +42,8 @@ export class Game {
     this.input     = new InputHandler(this.canvas);
     this.raycaster = new Raycaster(this.world);
     this.hud       = new HUD(this.player, this.user);
+    this._lastChunkX = null;   // o'yinchi oxirgi turgan chunk X
+    this._lastChunkZ = null;   // o'yinchi oxirgi turgan chunk Z
 
     // ── Inventory screen — loads blocks.json + items.json then inits ──
     this._inventory = null;
@@ -328,6 +330,12 @@ export class Game {
 
     const cx = Math.floor(this.player.x / 16);
     const cz = Math.floor(this.player.z / 16);
+    // O'yinchi yangi chunkka o'tganda konsolga chiqar
+    if (cx !== this._lastChunkX || cz !== this._lastChunkZ) {
+      console.log(`[Chunk] O'yinchi yangi chunkka o'tdi: (${cx}, ${cz})`);
+      this._lastChunkX = cx;
+      this._lastChunkZ = cz;
+    }
     this.world.loadChunksAround(cx, cz);
 
     // ── Fluid simulation tick ─────────────────────────────────────────────

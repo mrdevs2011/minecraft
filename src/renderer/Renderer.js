@@ -349,16 +349,10 @@ export class Renderer {
     );
     this._frustum.setFromProjectionMatrix(this._frustumMatrix);
 
-    // ── Frustum Culling: ko'rinmaydigan chunk meshlarini yashirish ──
-    // Har chunk entry sida .boundingBox (THREE.Box3) saqlanadi.
-    // Frustum bilan kesishmasalar — mesh.visible = false.
-    for (const [, entry] of this.chunkMeshes) {
-      if (!entry.boundingBox) continue;
-      const visible = this._frustum.intersectsBox(entry.boundingBox);
-      if (entry.opaqueMesh) entry.opaqueMesh.visible = visible;
-      if (entry.glassMesh)  entry.glassMesh.visible  = visible;
-      if (entry.waterMesh)  entry.waterMesh.visible  = visible;
-    }
+    // ── Frustum Culling + yaqin chunk filtri ──
+    // Faqat o'yinchi atrofidagi 3x3 (1 ta masofa) chunklar ko'rsatiladi.
+    // Undan uzoqdagilari visible = false — FPS barqarorlashadi.
+    this._setNearChunksVisible(player);
 
     this.webgl.render(this.scene, this.camera);
   }
@@ -507,6 +501,29 @@ export class Renderer {
   }
 
   _chunkKey(cx, cz) { return `${cx},${cz}`; }
+
+  // O'yinchi atrofidagi 3x3 chunkni (visibleRadius = 1) ko'rsatadi,
+  // qolganlarni visible = false qilib yashiradi. Frustum culling ham saqlanadi.
+  _setNearChunksVisible(player) {
+    const pcx = Math.floor(player.x / CHUNK_SIZE);
+    const pcz = Math.floor(player.z / CHUNK_SIZE);
+    const VISIBLE_RADIUS = 1; // 3x3 = 9 chunk
+
+    for (const [key, entry] of this.chunkMeshes) {
+      const [cx, cz] = key.split(',').map(Number);
+      const inRange = Math.abs(cx - pcx) <= VISIBLE_RADIUS &&
+                      Math.abs(cz - pcz) <= VISIBLE_RADIUS;
+
+      // Diapazon ichida bo'lsa — frustum culling bilan ko'rsat
+      // Tashqarida bo'lsa — to'liq yashir
+      const visible = inRange &&
+        (!entry.boundingBox || this._frustum.intersectsBox(entry.boundingBox));
+
+      if (entry.opaqueMesh) entry.opaqueMesh.visible = visible;
+      if (entry.glassMesh)  entry.glassMesh.visible  = visible;
+      if (entry.waterMesh)  entry.waterMesh.visible  = visible;
+    }
+  }
 
   _updateChunks(player) {
     const cx   = Math.floor(player.x / CHUNK_SIZE);
