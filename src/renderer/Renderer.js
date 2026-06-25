@@ -69,6 +69,7 @@ const WATER_VERT = /* glsl */`
   varying vec3  vColor;
   varying vec3  vWorldPos;
   varying vec2  vUv;
+  varying float vFogDist;
   uniform float uTime;
 
   void main() {
@@ -81,7 +82,9 @@ const WATER_VERT = /* glsl */`
       pos.y += sin(pos.z * 2.2 + uTime * 1.1) * 0.025;
     }
     vWorldPos   = pos;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+    vec4 mvPos  = modelViewMatrix * vec4(pos, 1.0);
+    vFogDist    = -mvPos.z;
+    gl_Position = projectionMatrix * mvPos;
   }
 `;
 
@@ -89,6 +92,7 @@ const WATER_FRAG = /* glsl */`
   varying vec3  vColor;
   varying vec3  vWorldPos;
   varying vec2  vUv;
+  varying float vFogDist;
   uniform float     uTime;
   uniform sampler2D uAtlas;
   uniform vec3      uFogColor;
@@ -103,9 +107,7 @@ const WATER_FRAG = /* glsl */`
     col = pow(clamp(col, 0.0, 1.0), vec3(1.0 / 2.2));
 
     // Fog
-    vec4 mvPos   = modelViewMatrix * vec4(vWorldPos, 1.0);
-    float fogDist   = -mvPos.z;
-    float fogFactor = clamp((fogDist - uFogNear) / (uFogFar - uFogNear), 0.0, 1.0);
+    float fogFactor = clamp((vFogDist - uFogNear) / (uFogFar - uFogNear), 0.0, 1.0);
     col = mix(col, uFogColor, fogFactor);
 
     gl_FragColor = vec4(col, 0.72);
