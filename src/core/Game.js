@@ -12,14 +12,13 @@ import { fetchAllBlockChanges, pushBlockChange, listenForBlockChanges,
          startPositionAutoSave, stopPositionAutoSave, loadLastPosition } from './Firebase.js';
 import { InventoryScreen } from '../../inventoryScreen.js';
 
-// Sensitivity matches THREE.js PointerLockControls default
 const SENSITIVITY = 0.002;
 const TWO_PI      = Math.PI * 2;
 
 export class Game {
   constructor(user = null) {
     this.user = user;
-    this.avatarId  = 'steve';   // updated after profile loads
+    this.avatarId  = 'steve';
     this.canvas    = document.getElementById('game-canvas');
     this.running   = false;
     this.paused    = false;
@@ -27,12 +26,11 @@ export class Game {
     this._lastTime = 0;
     this._moving   = false;
     this._dt       = 0.016;
-    // Other players: Map<uid, {data, steveModel}>
     this.otherPlayers = new Map();
-    this._posPushTimer = 0; // throttle: push every 100ms
-    this._isGhost = false;    // true when tab is hidden
+    this._posPushTimer = 0;
+    this._isGhost = false;
     this._unsubscribeClock = null;
-    this._touchAimScreen = null; // {x,y} — mobil: barmoq turgan ekran nuqtasi (aim/highlight uchun)
+    this._touchAimScreen = null;
   }
 
   start() {
@@ -42,10 +40,9 @@ export class Game {
     this.input     = new InputHandler(this.canvas);
     this.raycaster = new Raycaster(this.world);
     this.hud       = new HUD(this.player, this.user);
-    this._lastChunkX = null;   // o'yinchi oxirgi turgan chunk X
-    this._lastChunkZ = null;   // o'yinchi oxirgi turgan chunk Z
+    this._lastChunkX = null;
+    this._lastChunkZ = null;
 
-    // ── Inventory screen — loads blocks.json + items.json then inits ──
     this._inventory = null;
     Promise.all([
       fetch('blocks.json').then(r => r.json()),
@@ -54,13 +51,11 @@ export class Game {
       this._inventory = new InventoryScreen(this.player, blocksJson, itemsJson);
     });
 
-    // Spawn: avval Firebase dan oxirgi pozitsiya yuklanadi
     this.world.loadChunksAround(0, 0);
     const sy = this.world.getSurfaceY(0, 0);
     this.player.x = 0; this.player.y = sy + 2; this.player.z = 0;
     this.player._initInventory();
 
-    // Firebase dan oxirgi pozitsiya va inventarni yuklash
     if (this.user) {
       loadLastPosition(this.user.uid).then(pos => {
         if (pos) {
@@ -68,15 +63,11 @@ export class Game {
           this.player.y   = pos.y;
           this.player.z   = pos.z;
           this.player.yaw = pos.yaw ?? this.player.yaw;
-          // Yangi joydagi chunklarni yukla
           const cx = Math.floor(pos.x / 16);
           const cz = Math.floor(pos.z / 16);
           this.world.loadChunksAround(cx, cz);
-          console.log(`[Spawn] Oxirgi pozitsiyadan: (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)})`);
         }
       });
-
-      // Har 10 sekundda pozitsiyani Firebase ga yozib borish
       startPositionAutoSave(this.user.uid, () => this.player);
     }
 
@@ -88,9 +79,6 @@ export class Game {
       else if (btn === 2) this._placeBlock(hit);
     });
 
-    // ── Mobile touch: drag = look (handled in InputHandler), tap = place,
-    //    press-and-hold = break. Aim follows the finger, not a fixed
-    //    center crosshair (see css: crosshair is hidden on mobile). ──────
     this.input.onTouchAim((x, y) => {
       this._touchAimScreen = { x, y };
     });
@@ -110,9 +98,7 @@ export class Game {
 
     this._loadSharedWorld();
 
-    // ── Listen for other players ──────────────────────────────────────────
     if (this.user) {
-      // Realtime listener — o'z profilimiz o'zgarganda darhol qo'llanadi
       this._unsubscribeProfile = listenForUserProfile(this.user.uid, profile => {
         if (profile?.avatarId && profile.avatarId !== this.avatarId) {
           this.avatarId = profile.avatarId;
@@ -139,10 +125,8 @@ export class Game {
       this.hud.update();
     });
 
-    // ── Visibility change — ghost mode when tab is hidden ───────────────────
     this._onVisibilityChange = () => {
       this._isGhost = document.hidden;
-      // Immediately push ghost state so others see it right away
       if (this.user) {
         pushPlayerPosition(
           this.user.uid,
@@ -159,7 +143,6 @@ export class Game {
     };
     document.addEventListener('visibilitychange', this._onVisibilityChange);
 
-    // ── Shared game clock ─────────────────────────────────────────────────
     this._unsubscribeClock = listenForClock(seconds => {
       this.hud.updateClock(seconds);
     });
@@ -175,17 +158,17 @@ export class Game {
 
   _breakBlock(hit) {
     const brokenId = this.world.getBlock(hit.blockX, hit.blockY, hit.blockZ);
-
-    // ── QOIDA: Suv bloki BUZILMAYDI ──────────────────────────────────────────
-    if (brokenId === 7 /* BLOCK_WATER */) {
-      // Suv buzilmaydi — faqat vizual feedback (ixtiyoriy)
+    // Mojang: suvni ham buzish mumkin (faqat oqim suvlari)
+    if (brokenId === 8) { // BLOCK_WATER
+      const removed = this.world.fluid.removeFluid(hit.blockX, hit.blockY, hit.blockZ);
+      if (removed) {
+        pushBlockChange(hit.blockX, hit.blockY, hit.blockZ, 0);
+      }
       return;
     }
-
-    this.world.setBlock(hit.blockX, hit.blockY, hit.blockZ, 0 /* BLOCK_AIR */);
-    // Qo'shni suv bloklarini faollashtirish (to'siq ochildi — suv oqsin)
+    this.world.setBlock(hit.blockX, hit.blockY, hit.blockZ, 0);
     this.world.fluid._activateNeighbors(hit.blockX, hit.blockY, hit.blockZ);
-    pushBlockChange(hit.blockX, hit.blockY, hit.blockZ, 0 /* BLOCK_AIR */);
+    pushBlockChange(hit.blockX, hit.blockY, hit.blockZ, 0);
     if (brokenId && brokenId !== 0) {
       this._addToInventory(brokenId);
     }
@@ -195,21 +178,15 @@ export class Game {
     const item = this.player.getSelectedBlock();
     if (!item) return;
 
-    if (item.id === 7 /* BLOCK_WATER */) {
-      // ── QOIDA: Suv ustiga suv qo'yib bo'lmaydi (3+ blok chuqurlikda) ──────
-      // addSource() ichida isWaterTooDeep() tekshiruvi bor
-      const placed = this.world.fluid.addSource(hit.placeX, hit.placeY, hit.placeZ);
-      if (!placed) return; // tekshiruv rad etdi — inventardan olmaymiz
+    if (item.id === 8) { // BLOCK_WATER
+      this.world.fluid.addSource(hit.placeX, hit.placeY, hit.placeZ);
     } else {
-      // ── QOIDA: Suv bloki ustiga qattiq blok qo'yib bo'lmaydi ───────────────
+      // Mojang: suv ustiga blok qo‘yish mumkin
       const targetBlock = this.world.getBlock(hit.placeX, hit.placeY, hit.placeZ);
-      const belowBlock  = this.world.getBlock(hit.placeX, hit.placeY - 1, hit.placeZ);
-      // Suv ichiga yoki suv ustiga blok qo'yishni bloklash
-      if (targetBlock === 7 /* BLOCK_WATER */ || belowBlock === 7 /* BLOCK_WATER */) {
-        return;
+      if (targetBlock === 8) {
+        this.world.fluid.removeFluid(hit.placeX, hit.placeY, hit.placeZ);
       }
       this.world.setBlock(hit.placeX, hit.placeY, hit.placeZ, item.id);
-      // Yangi blok qo'yilsa — atrofdagi suvni faollashtirish
       this.world.fluid._activateNeighbors(hit.placeX, hit.placeY, hit.placeZ);
     }
 
@@ -223,11 +200,9 @@ export class Game {
     this._saveInventory();
   }
 
-  // Survival: blok buzilganda player inventariga qo'shish
   _addToInventory(blockId) {
     const p = this.player;
     const key = `block_${blockId}`;
-    // Stack existing
     for (let i = 0; i < 36; i++) {
       const slot = p.inventory[i];
       if (slot && slot.id === blockId && slot.count < 64) {
@@ -237,7 +212,6 @@ export class Game {
         return;
       }
     }
-    // New slot
     for (let i = 0; i < 36; i++) {
       if (!p.inventory[i]) {
         p.inventory[i] = { id: blockId, count: 1, key };
@@ -246,11 +220,9 @@ export class Game {
         return;
       }
     }
-    // Inventory full
     console.warn('Inventar to\'la!');
   }
 
-  // Inventarni Firebase ga debounce bilan saqlash (500ms)
   _saveInventory() {
     if (!this.user) return;
     if (this._saveInventoryTimer) clearTimeout(this._saveInventoryTimer);
@@ -261,28 +233,23 @@ export class Game {
   }
 
   async _loadSharedWorld() {
-    // ── Inventarni Firebase dan yuklash ──
     if (this.user) {
       const savedInventory = await loadUserInventory(this.user.uid);
       if (savedInventory) {
         this.player.inventory = savedInventory;
         this.hud?.update();
-        console.log('[Inventory] Firebase dan yuklandi');
       }
     }
 
     const changes = await fetchAllBlockChanges();
     for (const c of changes) {
-      // Firebase dagi o'zgarishlar dunyo generatsiyasidagi suvni AIR qilib tashlashiga
-      // yo'l qo'ymaymiz. Faqat o'yinchi qo'lda buzgan bloklar (non-water) o'tkaziladi.
       const existing = this.world.getBlock(c.x, c.y, c.z);
-      if (existing === 7 /* BLOCK_WATER */ && c.id === 0 /* AIR */) continue;
+      if (existing === 8 && c.id === 0) continue;
       this.world.setBlock(c.x, c.y, c.z, c.id);
     }
     this._unsubscribeWorld = listenForBlockChanges((x, y, z, id) => {
-      // Real-time o'zgarishlarda ham xuddi shunday himoya
       const existing = this.world.getBlock(x, y, z);
-      if (existing === 7 /* BLOCK_WATER */ && id === 0 /* AIR */) return;
+      if (existing === 8 && id === 0) return;
       this.world.setBlock(x, y, z, id);
     });
   }
@@ -301,48 +268,25 @@ export class Game {
 
   _update(dt) {
     const mouse = this.input.consumeMouse();
-
-    // ─── Correct FPS camera from THREE.js PointerLockControls source ───
-    // mouse.dx = raw movementX pixels (positive = mouse moved RIGHT)
-    // mouse.dy = raw movementY pixels (positive = mouse moved DOWN)
-    //
-    // yaw   -= movementX * sensitivity  →  mouse right = yaw decreases
-    //   In THREE.js with YXZ order: negative yaw = turn RIGHT  ✓
-    // pitch -= movementY * sensitivity  →  mouse down  = pitch decreases
-    //   In THREE.js with YXZ order: negative pitch = look DOWN  ✓
-    //
-    // Previous bug: code was doing yaw += dx which inverted left/right.
-
     this.player.yaw   -= mouse.dx * SENSITIVITY;
     this.player.pitch -= mouse.dy * SENSITIVITY;
-
-    // Wrap yaw to -PI..PI (full 360° rotation, no clamp)
     this.player.yaw = ((this.player.yaw + Math.PI) % TWO_PI + TWO_PI) % TWO_PI - Math.PI;
-
-    // Clamp pitch to ±90° (can't look past straight up/down)
     this.player.pitch = Math.max(-Math.PI / 2 + 0.01,
                          Math.min( Math.PI / 2 - 0.01, this.player.pitch));
 
     const input  = this.input.getMovement();
     this._moving = !!(input.forward || input.backward || input.left || input.right);
-
     this.player.update(dt, input);
 
     const cx = Math.floor(this.player.x / 16);
     const cz = Math.floor(this.player.z / 16);
-    // O'yinchi yangi chunkka o'tganda konsolga chiqar
     if (cx !== this._lastChunkX || cz !== this._lastChunkZ) {
-      console.log(`[Chunk] O'yinchi yangi chunkka o'tdi: (${cx}, ${cz})`);
       this._lastChunkX = cx;
       this._lastChunkZ = cz;
     }
     this.world.loadChunksAround(cx, cz);
-
-    // ── Fluid simulation tick ─────────────────────────────────────────────
     this.world.tick(dt);
 
-    // ── Push this player's position to Firebase (throttled, ~every 100ms) ─
-    // Firebase.js ichida epsilon tekshiruvi bor — hech narsa o'zgarmasa yozilmaydi.
     if (this.user) {
       this._posPushTimer += dt;
       if (this._posPushTimer >= 0.1) {
@@ -355,8 +299,8 @@ export class Game {
           this.player.z,
           this.player.yaw,
           this._moving,
-          this.avatarId,         // ← broadcast skin choice to other clients
-          this._isGhost          // ← ghost flag
+          this.avatarId,
+          this._isGhost
         );
       }
     }
@@ -380,8 +324,6 @@ export class Game {
     );
   }
 
-  // Mobil: barmoq turgan ekran nuqtasidan dunyo nuriga o'tkazib raycast qilamiz
-  // (markaziy "+" nishon o'rniga — bevosita tegilgan blok nishonlanadi).
   _raycastAtScreen(screenX, screenY) {
     const { ox, oy, oz, dx, dy, dz } = this.renderer.screenPointToRay(screenX, screenY);
     return this.raycaster.cast(ox, oy, oz, dx, dy, dz);
@@ -391,9 +333,7 @@ export class Game {
     this.paused = !this.paused;
     const pauseMenu = document.getElementById('pause-menu');
     pauseMenu.classList.toggle('hidden', !this.paused);
-
     if (this.paused) {
-      // Fill user info in pause card
       const u = this.user;
       if (u) {
         const nameEl  = document.getElementById('pause-user-name');
@@ -428,7 +368,6 @@ export class Game {
     document.removeEventListener('visibilitychange', this._onVisibilityChange);
     stopPositionAutoSave();
     if (this.user) removePlayerDoc(this.user.uid);
-    // Cache qatlamlarini rotate qilish (current → previous)
     rotateCacheOnExit();
   }
 }
