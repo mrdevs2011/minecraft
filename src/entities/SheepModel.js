@@ -58,8 +58,9 @@ export class SheepModel {
       this._model.scale.setScalar(SHEEP_SCALE);
 
       // Pastki markaz hisoblash — oyoqlar yerda tursin
+      // Scale allaqachon model ichida qo'llanilgani uchun faqat box.min.y ni olamiz
       const box = new THREE.Box3().setFromObject(this._model);
-      this._model.position.y = -(box.min.y * SHEEP_SCALE);
+      this._model.position.y = -box.min.y;
 
       this.root.add(this._model);
 

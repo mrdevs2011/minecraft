@@ -231,8 +231,30 @@ export class Player {
   }
 
   respawn() {
-    const sx = this.world.getSurfaceY(0, 0);
-    this.x = 0; this.y = sx + 2; this.z = 0;
+    // Avval (0,0) ga qayt, agar suvda bo'lsa — quruq joy qidiradi
+    let sx = this.world.getSurfaceY(0, 0);
+    let rx = 0, rz = 0;
+
+    const blockBelow = this.world.getBlock(0, sx - 1, 0);
+    if (blockBelow === 7 /* BLOCK_WATER */) {
+      // Suvda — yaqin atrofda quruq joy qidirish
+      for (let r = 1; r <= 10; r++) {
+        for (let dx = -r; dx <= r; dx++) {
+          for (let dz = -r; dz <= r; dz++) {
+            if (Math.abs(dx) !== r && Math.abs(dz) !== r) continue;
+            const bBelow = this.world.getBlock(dx, this.world.getSurfaceY(dx, dz) - 1, dz);
+            if (bBelow !== 7) {
+              rx = dx; rz = dz;
+              sx = this.world.getSurfaceY(rx, rz);
+              r = 999; break;
+            }
+          }
+          if (r === 999) break;
+        }
+      }
+    }
+
+    this.x = rx; this.y = sx + 2; this.z = rz;
     this.vx = this.vy = this.vz = 0;
     this.health = this.maxHealth;
   }

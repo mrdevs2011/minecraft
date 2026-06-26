@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  BaseAvatar — Steve GLB model asosida barcha 8 avatar
@@ -79,7 +80,7 @@ export class BaseAvatar {
     try {
       const gltf = await loadGLTF();
 
-      this._model = gltf.scene.clone(true);
+      this._model = SkeletonUtils.clone(gltf.scene);
       this._model.scale.setScalar(STEVE_SCALE);
 
       // Pastki markaz hisoblash

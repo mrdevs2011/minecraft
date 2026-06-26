@@ -1,46 +1,45 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  avatars/index.js
 //  Central registry for all playable avatar types.
-//
-//  Usage:
-//    import { getRandomAvatarId, createAvatar, AVATAR_IDS } from '../avatars/index.js';
-//    const id  = getRandomAvatarId();           // e.g. 'steve'
-//    const mdl = createAvatar(scene, id);       // returns a BaseAvatar instance
-//
-//  VAQTINCHA: faqat Steve mavjud. Boshqa 7 avatar (alex, ari, noor, makena,
-//  efe, zuri, kai) fayllari o'chirilgan — keyinroq birma-bir qayta qo'shiladi.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { SteveAvatar } from './steve.js';
+import { SteveAvatar  } from './steve.js';
+import { AlexAvatar   } from './alex.js';
+import { AriAvatar    } from './ari.js';
+import { EfeAvatar    } from './efe.js';
+import { KaiAvatar    } from './kai.js';
+import { MakenaAvatar } from './makena.js';
+import { NoorAvatar   } from './noor.js';
+import { ZuriAvatar   } from './zuri.js';
 
-/** Ordered list of all avatar IDs currently available. */
-export const AVATAR_IDS = ['steve'];
+/** Barcha mavjud avatar ID lari */
+export const AVATAR_IDS = ['steve', 'alex', 'ari', 'efe', 'kai', 'makena', 'noor', 'zuri'];
 
-/** Map from avatar ID string → constructor class. */
+/** ID → konstruktor */
 export const AVATAR_CLASS_MAP = {
-  steve: SteveAvatar,
+  steve:  SteveAvatar,
+  alex:   AlexAvatar,
+  ari:    AriAvatar,
+  efe:    EfeAvatar,
+  kai:    KaiAvatar,
+  makena: MakenaAvatar,
+  noor:   NoorAvatar,
+  zuri:   ZuriAvatar,
 };
 
-/**
- * Returns a random avatar ID string.
- * Called once when a new user account is created.
- */
+/** Yangi o'yinchi uchun tasodifiy avatar ID qaytaradi */
 export function getRandomAvatarId() {
   return AVATAR_IDS[Math.floor(Math.random() * AVATAR_IDS.length)];
 }
 
 /**
- * Instantiates and returns the avatar model for the given ID.
- * Falls back to Steve if the ID is unknown.
- *
- * @param {THREE.Scene} scene   - The Three.js scene to add the model to.
- * @param {string}      avatarId - e.g. 'steve' (only option for now).
- * @returns {BaseAvatar}
+ * Berilgan ID bo'yicha avatar modeli yaratib qaytaradi.
+ * Noma'lum ID bo'lsa — Steve dan foydalaniladi.
  */
 export function createAvatar(scene, avatarId) {
   const AvatarClass = AVATAR_CLASS_MAP[avatarId] ?? SteveAvatar;
   return new AvatarClass(scene);
 }
 
-// Re-export individual classes for direct use
-export { SteveAvatar };
+// Alohida classlarni ham re-export
+export { SteveAvatar, AlexAvatar, AriAvatar, EfeAvatar, KaiAvatar, MakenaAvatar, NoorAvatar, ZuriAvatar };

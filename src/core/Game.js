@@ -50,11 +50,13 @@ export class Game {
 
     // ── Inventory screen — loads blocks.json + items.json then inits ──
     this._inventory = null;
+    this._itemsData = null;
     Promise.all([
       fetch('blocks.json').then(r => r.json()),
       fetch('items.json').then(r => r.json()),
     ]).then(([blocksJson, itemsJson]) => {
       this._inventory = new InventoryScreen(this.player, blocksJson, itemsJson);
+      this._itemsData = itemsJson.items; // ovqat yeyish uchun saqlaymiz
     });
 
     // Spawn: avval Firebase dan oxirgi pozitsiya yuklanadi
@@ -65,6 +67,13 @@ export class Game {
 
     // Hayvonlar (qo'y) va zombilarni o'yinchi spawn nuqtasi atrofida joylashtirish
     this.mobManager.init(this.player.x, this.player.z);
+
+    // Mob o'lganda drop olish callback
+    this.mobManager.onMobDrop = (x, y, z, drops) => {
+      for (const drop of drops) {
+        this._addItemToInventory(drop.itemId, drop.itemKey, drop.count);
+      }
+    };
 
     // Firebase dan oxirgi pozitsiya va inventarni yuklash
     if (this.user) {
@@ -93,6 +102,8 @@ export class Game {
         const hit = this._raycast();
         if (hit.hit) this._breakBlock(hit);
       } else if (btn === 2) {
+        // O'ng tugma: avval ovqat yeyishni tekshir
+        if (this._tryEatFood()) return;
         const hit = this._raycast();
         if (hit.hit) this._placeBlock(hit);
       }
@@ -236,29 +247,60 @@ export class Game {
 
   // Survival: blok buzilganda player inventariga qo'shish
   _addToInventory(blockId) {
+    this._addItemToInventory(blockId, `block_${blockId}`, 1);
+  }
+
+  // Umumiy inventory qo'shish (block yoki item)
+  _addItemToInventory(itemId, itemKey, count = 1) {
     const p = this.player;
-    const key = `block_${blockId}`;
-    // Stack existing
     for (let i = 0; i < 36; i++) {
       const slot = p.inventory[i];
-      if (slot && slot.id === blockId && slot.count < 64) {
-        slot.count++;
+      if (slot && slot.id === itemId && slot.count < 64) {
+        slot.count = Math.min(64, slot.count + count);
         this.hud.update();
         this._saveInventory();
         return;
       }
     }
-    // New slot
     for (let i = 0; i < 36; i++) {
       if (!p.inventory[i]) {
-        p.inventory[i] = { id: blockId, count: 1, key };
+        p.inventory[i] = { id: itemId, count, key: itemKey };
         this.hud.update();
         this._saveInventory();
         return;
       }
     }
-    // Inventory full
     console.warn('Inventar to\'la!');
+  }
+
+  // O'ng tugma bosilganda tanlangan slot ovqat bo'lsa yeydi
+  // items.json dan yuklanган ma'lumotlardan foydalanadi
+  _tryEatFood() {
+    const item = this.player.getSelectedBlock();
+    if (!item) return false;
+    if (!this._itemsData) return false;
+
+    const itemDef = Object.values(this._itemsData).find(v => v.id === item.id);
+    if (!itemDef || itemDef.category !== 'food') return false;
+
+    const hunger = itemDef.hunger || 0;
+    if (hunger <= 0) return false;
+
+    // To'q bo'lsa yeyilmaydi
+    if (this.player.hunger >= this.player.maxHunger && this.player.health >= this.player.maxHealth) {
+      return false;
+    }
+
+    this.player.eat(hunger);
+
+    const slot = this.player.inventory[this.player.hotbarSlot];
+    if (slot) {
+      slot.count--;
+      if (slot.count <= 0) this.player.inventory[this.player.hotbarSlot] = null;
+    }
+    this.hud.update();
+    this._saveInventory();
+    return true;
   }
 
   // Inventarni Firebase ga debounce bilan saqlash (500ms)
