@@ -130,19 +130,24 @@ export class ZombieAvatar {
 
     // ── Qo'llar ───────────────────────────────────────────────────────────
     if (attackAnim > 0) {
-      // Zarba: qo'llar oldinga-orqaga tez silkiydi
-      const hit = Math.sin(attackAnim * Math.PI * 2) * 1.1;
-      if (this._armL) this._armL.rotation.x = this._origRot.armL.x - Math.PI * 0.5 + hit;
-      if (this._armR) this._armR.rotation.x = this._origRot.armR.x - Math.PI * 0.5 - hit * 0.5;
+      // Zarba: ikkala qo'l oldinga ko'tariladi, so'ng tepa-pastga tebranadi
+      // attackAnim 0→1 sikl, sin bilan tepa-pastga (-0.3 ~ +0.3 rad)
+      const wave = Math.sin(attackAnim * Math.PI * 2) * 0.35;
+      // Qo'llar oldinga ko'tarilgan baza: -PI*0.55 (taxminan gorizontal)
+      // va wave qo'shilsa biroz yuqori-pastga tushadi
+      if (this._armL) this._armL.rotation.x = this._origRot.armL.x - Math.PI * 0.55 + wave;
+      if (this._armR) this._armR.rotation.x = this._origRot.armR.x - Math.PI * 0.55 + wave;
+      // Qo'llar biroz tashqariga yoyilgan (zombie klassik poza)
+      if (this._armL) this._armL.rotation.z =  0.18;
+      if (this._armR) this._armR.rotation.z = -0.18;
     } else {
       // Oddiy yurish — teskari oyoqlar bilan
       if (this._armL) this._armL.rotation.x = this._origRot.armL.x - swing;
       if (this._armR) this._armR.rotation.x = this._origRot.armR.x + swing;
+      // Qo'llar biroz tashqariga
+      if (this._armL) this._armL.rotation.z = moving ?  0.05 : 0;
+      if (this._armR) this._armR.rotation.z = moving ? -0.05 : 0;
     }
-
-    // Qo'llar biroz tashqariga
-    if (this._armL) this._armL.rotation.z = moving ?  0.05 : 0;
-    if (this._armR) this._armR.rotation.z = moving ? -0.05 : 0;
 
     // ── Bosh burish — player tomonga ──────────────────────────────────────
     if (this._head) {

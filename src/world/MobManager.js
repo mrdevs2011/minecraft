@@ -25,7 +25,7 @@ const ZOMBIE_ATTACK_CD    = 1.0;
 
 const GRAVITY       = -18;
 const WATER_GRAVITY = -4;    // suv ichida sekin cho'kadi
-const JUMP_VEL      =  7;
+const JUMP_VEL      =  5;  // 1 blok oshib o'tish uchun yetarli
 
 const HURT_FLASH_TIME = 0.25;
 const SHEEP_HP        = 8;
@@ -294,8 +294,17 @@ export class MobManager {
           mob._targetX = mob.x + Math.cos(angle) * r;
           mob._targetZ = mob.z + Math.sin(angle) * r;
         }
-        mob._state      = 'roam';
-        mob._stateTimer = 3 + Math.random() * 4;
+        // Target suvda bo'lmasin — tekshirib qayta tanlash
+        const tSurfY = this.world.getSurfaceY(Math.round(mob._targetX), Math.round(mob._targetZ));
+        const tBlockBelow = this.world.getBlock(Math.round(mob._targetX), tSurfY - 1, Math.round(mob._targetZ));
+        if (tBlockBelow === 7) {
+          // Suv — idle ga qayt, keyingi tick da yangi target tanlaydi
+          mob._state      = 'idle';
+          mob._stateTimer = 1;
+        } else {
+          mob._state      = 'roam';
+          mob._stateTimer = 3 + Math.random() * 4;
+        }
       }
     } else if (mob._state === 'roam') {
       mob.moving = true;
@@ -403,6 +412,19 @@ export class MobManager {
     const canX = !this._isSolid(newX, mob.y, mob.z, mobR, mobH);
     const canZ = !this._isSolid(mob.x, mob.y, newZ, mobR, mobH);
 
+    // Qo'y suvga kirmasin: keyingi pozitsiya suvda bo'lsa harakatni to'xtat
+    if (mob.type === 'sheep') {
+      const nextSurfY = this.world.getSurfaceY(Math.round(newX), Math.round(newZ));
+      const nextBlock = this.world.getBlock(Math.round(newX), nextSurfY - 1, Math.round(newZ));
+      const stepIntoWater = nextBlock === 7;
+      if (stepIntoWater) {
+        // Suvga qarab bormaslik — idle ga qayt
+        mob._state      = 'idle';
+        mob._stateTimer = 1.5;
+        return false;
+      }
+    }
+
     if (canX) mob.x = newX;
     if (canZ) mob.z = newZ;
 
@@ -410,8 +432,15 @@ export class MobManager {
       if (mob._onGround) {
         const frontX = mob.x + nx * 0.6;
         const frontZ = mob.z + nz * 0.6;
-        const frontSolid = this._isSolid(frontX, mob.y + 0.1, frontZ, mobR, 1.0);
-        if (frontSolid) mob.vy = JUMP_VEL;
+        // Faqat 1 blok balandlikdagi to'siq bo'lsa sakra:
+        // - Oyoq hizasida blok bor (to'siq mavjud)
+        // - Lekin 1 blok yuqorida bo'sh (sakrasa o'tadi)
+        const blockedLow  = this._isSolid(frontX, mob.y + 0.1, frontZ, mobR * 0.8, 0.9);
+        const blockedHigh = this._isSolid(frontX, mob.y + 1.05, frontZ, mobR * 0.8, 0.9);
+        if (blockedLow && !blockedHigh && !mob._jumping) {
+          mob.vy = JUMP_VEL;
+          mob._jumping = true;
+        }
       }
       return false;
     }
@@ -429,25 +458,42 @@ export class MobManager {
     const inWater = (feetBlockId === 7 /* BLOCK_WATER */);
 
     if (inWater) {
-      // Suv ichida sekin cho'kadi, to'liq cho'kib o'lmaydi
       mob.vy += WATER_GRAVITY * dt;
-      mob.vy *= 0.88; // suv qarshiligi
-      if (mob.vy < -2) mob.vy = -2; // maksimal cho'kish tezligi
+      mob.vy *= 0.88;
+      if (mob.vy < -2) mob.vy = -2;
     } else {
       mob.vy += GRAVITY * dt;
     }
 
-    const newY = mob.y + mob.vy * dt;
+    const mobR = 0.3;
+    let newY = mob.y + mob.vy * dt;
 
-    const mobR = 0.4;
-    const solidBelow = this._isSolid(mob.x, newY - 0.05, mob.z, mobR, 0.1);
-
-    if (solidBelow && mob.vy <= 0) {
-      mob._onGround = true;
-      mob.vy = 0;
-      const surfY = this.world.getSurfaceY(Math.round(mob.x), Math.round(mob.z));
-      mob.y = surfY;
+    if (mob.vy <= 0) {
+      // Pastga tushayotganda — yerga tegdimi?
+      const solidBelow = this._isSolid(mob.x, newY - 0.05, mob.z, mobR, 0.1);
+      if (solidBelow) {
+        mob._onGround = true;
+        mob._jumping  = false;
+        mob.vy = 0;
+        // Mob oyog'ini blok ustiga aniq o'tkazish (snap)
+        // Faqat 0.5 blokdan kam masofada snap qilamiz — uzoqqa sakrab ketmasin
+        const floorY = Math.floor(mob.y) + 1;
+        if (mob.y - floorY < 0.6) {
+          newY = floorY;
+        } else {
+          newY = Math.ceil(mob.y);
+        }
+        mob.y = newY;
+      } else {
+        mob._onGround = false;
+        mob.y = newY;
+      }
     } else {
+      // Yuqoriga (sakrash) — tepada blok tekshirish
+      const solidAbove = this._isSolid(mob.x, newY + 1.8, mob.z, mobR, 0.1);
+      if (solidAbove) {
+        mob.vy = 0; // boshini urganda to'xtaydi
+      }
       mob._onGround = false;
       mob.y = newY;
     }
