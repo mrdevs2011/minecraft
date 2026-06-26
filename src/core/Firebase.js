@@ -122,7 +122,8 @@ function _reconnectWebSocket() {
 }
 
 // ─── Avatar helpers ───────────────────────────────────────────────────────────
-const AVATAR_IDS = ['steve', 'alex', 'dream'];
+// ProceduralAvatar ID lari — serverdan GLB yuklanmaydi
+const AVATAR_IDS = ['steve', 'alex', 'dream', 'notch', 'herobrine', 'creeper'];
 function randomAvatarId() {
   return AVATAR_IDS[Math.floor(Math.random() * AVATAR_IDS.length)];
 }
@@ -576,9 +577,10 @@ export async function pushPlayerPosition(uid, displayName, x, y, z, yaw, moving,
       body: JSON.stringify({
         uid, displayName: displayName || 'Player',
         x, y, z, yaw,
-        moving:   !!moving,
-        avatarId: avatarId || 'steve',
-        ghost:    !!ghost,
+        moving:    !!moving,
+        avatarId:  avatarId || 'steve',
+        ghost:     !!ghost,
+        updatedAt: now,
       }),
     });
     _lastPushedPosition.set(uid, { x, y, z, yaw, moving: !!moving, avatarId, ghost: !!ghost, at: now });
@@ -604,7 +606,9 @@ export function listenForPlayers(myUid, callback) {
       const now  = Date.now();
       for (const p of Object.values(data)) {
         if (p.uid === myUid) continue;
-        const age = now - (p.updatedAt || 0);
+        // updatedAt server yoki client tomonidan yozilishi mumkin
+        // Agar updatedAt yo'q bo'lsa — hozirgi vaqtni ishlatamiz (filter qilinmasin)
+        const age = p.updatedAt ? now - p.updatedAt : 0;
         if (age > 60_000) continue;
         p.isGhost = !!p.ghost || age > 10_000;
         map.set(p.uid, p);

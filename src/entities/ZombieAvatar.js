@@ -1,232 +1,176 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  ZombieAvatar — zombie.glb modeli, Steve kabi qo'l/oyoq animatsiyasi
-//
-//  zombie.glb node nomlari:
-//    z_head   → bosh
-//    z_body   → tana
-//    z_arm_l  → chap qo'l
-//    z_arm_r  → o'ng qo'l
-//    z_leg_l  → chap oyoq
-//    z_leg_r  → o'ng oyoq
-// ─────────────────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+//  ZombieAvatar — to'liq THREE.js da qurilgan, hech qanday .glb yuklanmaydi.
+//  Minecraft zombie ranglari: yashil teri, yirtiq ko'k-kulrang kiyim.
+//  Steve bilan bir xil proporsiyon va animatsiya.
+// ═══════════════════════════════════════════════════════════════════════════
 
-const ZOMBIE_SCALE = 0.25;   // Steve bilan bir xil: raw H=8, scale 0.25 → 2 blok balandlik
-const GLB_PATH     = 'models/zombie.glb';
+const PX = 1 / 16;
 
-const _loader = new GLTFLoader();
-let _gltfCache   = null;
-let _loadPromise = null;
+const HEAD_W = 8 * PX, HEAD_H = 8 * PX, HEAD_D = 8 * PX;
+const BODY_W = 8 * PX, BODY_H = 12 * PX, BODY_D = 4 * PX;
+const ARM_W  = 4 * PX, ARM_H  = 12 * PX, ARM_D  = 4 * PX;
+const LEG_W  = 4 * PX, LEG_H  = 12 * PX, LEG_D  = 4 * PX;
 
-function loadGLTF() {
-  if (_gltfCache)   return Promise.resolve(_gltfCache);
-  if (_loadPromise) return _loadPromise;
-  _loadPromise = new Promise((resolve, reject) => {
-    _loader.load(GLB_PATH,
-      gltf => { _gltfCache = gltf; resolve(gltf); },
-      undefined,
-      err  => { console.error('[ZombieAvatar] GLB yuklanmadi:', err); reject(err); }
-    );
-  });
-  return _loadPromise;
+const LEG_PIVOT_Y   = LEG_H;
+const BODY_CENTER_Y = LEG_PIVOT_Y + BODY_H / 2;
+const HEAD_BOTTOM_Y = LEG_PIVOT_Y + BODY_H;
+const SHOULDER_Y    = HEAD_BOTTOM_Y;
+
+// Zombie ranglari
+const Z_SKIN  = 0x799c65;  // yashil teri
+const Z_SHIRT = 0x4a5a7a;  // ko'k-kulrang ko'ylak (yirtiq)
+const Z_PANTS = 0x3a4a6a;  // to'q ko'k shim
+const Z_SHOES = 0x1a2a1a;  // qoramtir poyabzal
+
+function mat(color, opts = {}) {
+  return new THREE.MeshLambertMaterial({ color, ...opts });
+}
+function box(w, h, d, color, opts) {
+  return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(color, opts));
 }
 
 export class ZombieAvatar {
   constructor(scene) {
     this.scene      = scene;
-    this._ready     = false;
     this._time      = 0;
     this._moving    = false;
     this._hurtFlash = false;
-
-    // Model qismlari (zombie.glb nodes)
-    this._head  = null;
-    this._body  = null;
-    this._armL  = null;
-    this._armR  = null;
-    this._legL  = null;
-    this._legR  = null;
-    this._origRot = null;
+    this._hurtMats  = [];
+    this._ready     = true;
 
     this.root = new THREE.Group();
     scene.add(this.root);
-
-    this._load();
+    this._build();
   }
 
-  async _load() {
-    try {
-      const gltf = await loadGLTF();
+  _build() {
+    // ── Oyoqlar ──────────────────────────────────────────────────────────────
+    this._legR = new THREE.Group();
+    const lrm = box(LEG_W, LEG_H, LEG_D, Z_PANTS);
+    lrm.position.y = -LEG_H / 2;
+    const lrs = box(LEG_W + 0.01, 2 * PX, LEG_D + 0.01, Z_SHOES);
+    lrs.position.y = -LEG_H + PX;
+    this._legR.add(lrm, lrs);
+    this._legR.position.set(-LEG_W / 2 - 0.5 * PX, LEG_PIVOT_Y, 0);
+    this.root.add(this._legR);
 
-      // SkeletonUtils.clone — skinned mesh uchun to'g'ri clone
-      this._model = SkeletonUtils.clone(gltf.scene);
-      this._model.scale.setScalar(ZOMBIE_SCALE);
+    this._legL = new THREE.Group();
+    const llm = box(LEG_W, LEG_H, LEG_D, Z_PANTS);
+    llm.position.y = -LEG_H / 2;
+    const lls = box(LEG_W + 0.01, 2 * PX, LEG_D + 0.01, Z_SHOES);
+    lls.position.y = -LEG_H + PX;
+    this._legL.add(llm, lls);
+    this._legL.position.set( LEG_W / 2 + 0.5 * PX, LEG_PIVOT_Y, 0);
+    this.root.add(this._legL);
 
-      // Oyoqlar yerda tursin
-      const box = new THREE.Box3().setFromObject(this._model);
-      this._model.position.y = -box.min.y;
+    // ── Tana ─────────────────────────────────────────────────────────────────
+    this._body = box(BODY_W, BODY_H, BODY_D, Z_SHIRT);
+    this._body.position.set(0, BODY_CENTER_Y, 0);
+    this.root.add(this._body);
 
-      this.root.add(this._model);
+    // ── Qo'llar (zombie: oldinga uzatilgan) ──────────────────────────────────
+    const armOffX = BODY_W / 2 + ARM_W / 2 + 0.5 * PX;
 
-      // Node larni topamiz
-      this._model.traverse(obj => {
-        switch (obj.name) {
-          case 'z_head':  this._head  = obj; break;
-          case 'z_body':  this._body  = obj; break;
-          case 'z_arm_l': this._armL  = obj; break;
-          case 'z_arm_r': this._armR  = obj; break;
-          case 'z_leg_l': this._legL  = obj; break;
-          case 'z_leg_r': this._legR  = obj; break;
-        }
-      });
+    this._armR = new THREE.Group();
+    const armRm = box(ARM_W, ARM_H, ARM_D, Z_SHIRT);
+    armRm.position.y = -ARM_H / 2;
+    this._armR.add(armRm);
+    this._armR.position.set(-armOffX, SHOULDER_Y, 0);
+    // Zombie qo'llarini oldinga uzatamiz
+    this._armR.rotation.x = -Math.PI / 2;
+    this.root.add(this._armR);
 
-      // Asl rotatsiyalarni (GLB T-pose) saqlaymiz
-      this._origRot = {
-        armL:  this._armL ? this._armL.rotation.clone() : new THREE.Euler(),
-        armR:  this._armR ? this._armR.rotation.clone() : new THREE.Euler(),
-        legL:  this._legL ? this._legL.rotation.clone() : new THREE.Euler(),
-        legR:  this._legR ? this._legR.rotation.clone() : new THREE.Euler(),
-        head:  this._head ? this._head.rotation.clone() : new THREE.Euler(),
-        headY: this._head ? this._head.position.y       : 0,
-      };
+    this._armL = new THREE.Group();
+    const armLm = box(ARM_W, ARM_H, ARM_D, Z_SHIRT);
+    armLm.position.y = -ARM_H / 2;
+    this._armL.add(armLm);
+    this._armL.position.set( armOffX, SHOULDER_Y, 0);
+    this._armL.rotation.x = -Math.PI / 2;
+    this.root.add(this._armL);
 
-      // GLB animatsiyalarini O'CHIRAMIZ — kod orqali boshqaramiz
-      // (mixer ishlatmaymiz)
+    // ── Bosh ─────────────────────────────────────────────────────────────────
+    this._headGroup = new THREE.Group();
+    const headMesh = box(HEAD_W, HEAD_H, HEAD_D, Z_SKIN);
+    headMesh.position.y = HEAD_H / 2;
 
-      this._ready = true;
+    // Zombie ko'zlari: qizil
+    const eyeZ = HEAD_D / 2 + 0.001;
+    const eyeH = 1.5 * PX, eyeW = 2 * PX;
+    const eyeY = HEAD_H / 2 + 1 * PX;
+    const mkEye = (ox) => {
+      const e = new THREE.Mesh(
+        new THREE.BoxGeometry(eyeW, eyeH, 0.001),
+        mat(0xff2222)
+      );
+      e.position.set(ox, eyeY, eyeZ);
+      return e;
+    };
+    this._headGroup.add(headMesh, mkEye(-2 * PX), mkEye(2 * PX));
 
-    } catch (e) {
-      console.warn('[ZombieAvatar] GLB yuklanmadi, fallback:', e);
-      this._buildFallback();
-      this._ready = true;
-    }
+    this._headGroup.position.set(0, HEAD_BOTTOM_Y, 0);
+    this.root.add(this._headGroup);
+
+    // hurt flash uchun barcha materiallarni yig'amiz
+    this.root.traverse(obj => {
+      if (obj.isMesh && obj.material) this._hurtMats.push(obj.material);
+    });
+
+    // Asl rotatsiyalar (qo'llar oldinga uzatilgan)
+    this._origRot = {
+      armR: this._armR.rotation.clone(),
+      armL: this._armL.rotation.clone(),
+      legR: this._legR.rotation.clone(),
+      legL: this._legL.rotation.clone(),
+    };
   }
 
-  // ── UPDATE — har frameda Renderer tomonidan chaqiriladi ───────────────────
-  // headYaw, headPitch: bosh burish (radians)
-  // attackAnim: 0..1 — zarba silkitish sikli
-  update(x, y, z, yaw, moving, dt, headYaw = 0, headPitch = 0, attackAnim = 0) {
+  update(x, y, z, yaw, moving, dt,
+         headYaw = 0, headPitch = 0, attackAnim = 0) {
     this.root.position.set(x, y, z);
     this.root.rotation.y = yaw + Math.PI;
 
-    if (!this._ready) return;
-
-    // ── Yurish vaqti ──────────────────────────────────────────────────────
     if (moving) {
-      this._time += dt * 9;
+      this._time += dt * 7;
     } else {
-      // To'xtatganda animatsiya nolga yaqinlashadi
-      if (Math.abs(Math.sin(this._time)) > 0.02) this._time += dt * 6;
+      if (Math.abs(Math.sin(this._time)) > 0.015) this._time += dt * 7;
     }
 
-    const swing = moving ? Math.sin(this._time) * 0.65 : 0;
+    const swing = moving ? Math.sin(this._time) * 0.5 : 0;
 
-    // ── Oyoqlar tebranishi ────────────────────────────────────────────────
-    if (this._legL) this._legL.rotation.x = (this._origRot.legL.x) + swing;
-    if (this._legR) this._legR.rotation.x = (this._origRot.legR.x) - swing;
+    // Oyoqlar yurish animatsiyasi
+    this._legR.rotation.x = this._origRot.legR.x - swing;
+    this._legL.rotation.x = this._origRot.legL.x + swing;
 
-    // ── Qo'llar ───────────────────────────────────────────────────────────
-    if (attackAnim > 0) {
-      // Zarba: ikkala qo'l sinxron tepa-pastga tushadi
-      // attackAnim 0→1, qo'llar yuqoridan (−PI) pastga (−PI*0.3) tushadi va qaytadi
-      const t = attackAnim * Math.PI * 2;          // 0 → 2PI
-      const swing = -Math.PI * 0.65 - Math.sin(t) * Math.PI * 0.35;
-      // swing range: yuqori (~-PI) → pastga (~-PI*0.3)
-      if (this._armL) this._armL.rotation.x = this._origRot.armL.x + swing;
-      if (this._armR) this._armR.rotation.x = this._origRot.armR.x + swing;
-      if (this._armL) this._armL.rotation.z =  0.18;
-      if (this._armR) this._armR.rotation.z = -0.18;
-    } else {
-      // Oddiy yurish — teskari oyoqlar bilan
-      if (this._armL) this._armL.rotation.x = this._origRot.armL.x - swing;
-      if (this._armR) this._armR.rotation.x = this._origRot.armR.x + swing;
-      // Qo'llar biroz tashqariga
-      if (this._armL) this._armL.rotation.z = moving ?  0.05 : 0;
-      if (this._armR) this._armR.rotation.z = moving ? -0.05 : 0;
+    // Qo'llar: zombie qo'llari oldinga uzatilgan (-PI/2 baza),
+    // hujum animatsiyasida pastga tushadi
+    const attackSwing = attackAnim * 0.8;
+    this._armR.rotation.x = this._origRot.armR.x + attackSwing + swing * 0.3;
+    this._armL.rotation.x = this._origRot.armL.x + attackSwing - swing * 0.3;
+
+    // Bosh yaw/pitch
+    if (this._headGroup) {
+      this._headGroup.rotation.y = headYaw;
+      this._headGroup.rotation.x = headPitch;
+      const bobY = moving ? Math.abs(Math.sin(this._time * 2)) * 0.02 : 0;
+      this._headGroup.position.y = HEAD_BOTTOM_Y + bobY;
     }
-
-    // ── Bosh burish — player tomonga ──────────────────────────────────────
-    if (this._head) {
-      this._head.rotation.y = THREE.MathUtils.lerp(
-        this._head.rotation.y, this._origRot.head.y + headYaw, 0.12
-      );
-      this._head.rotation.x = THREE.MathUtils.lerp(
-        this._head.rotation.x, this._origRot.head.x + headPitch, 0.12
-      );
-
-      // Bosh bob (yuqori-pastga sakrash)
-      const bob = moving ? Math.abs(Math.sin(this._time * 2)) * 0.018 : 0;
-      this._head.position.y = this._origRot.headY + bob;
-    }
-
-    // Tana biroz oldinga egiladi
-    if (this._body) this._body.rotation.x = moving ? 0.05 : 0;
-  }
-
-  // ── Hurt flash ────────────────────────────────────────────────────────────
-  setHurt(isHurt) {
-    if (this._hurtFlash === isHurt) return;
-    this._hurtFlash = isHurt;
-    if (!this._ready) return;
-
-    this.root.traverse(obj => {
-      if (!obj.isMesh || !obj.material) return;
-      if (isHurt) {
-        if (!obj._origEmissive) {
-          obj._origEmissive = obj.material.emissive
-            ? obj.material.emissive.clone()
-            : new THREE.Color(0);
-        }
-        obj.material.emissive?.set(0x661100);
-      } else {
-        if (obj._origEmissive) obj.material.emissive?.copy(obj._origEmissive);
-        else obj.material.emissive?.set(0x000000);
-      }
-      obj.material.needsUpdate = true;
-    });
   }
 
   setVisible(v) { this.root.visible = v; }
 
-  // ── Fallback ───────────────────────────────────────────────────────────────
-  _buildFallback() {
-    const mat  = c => new THREE.MeshLambertMaterial({ color: c });
-    const cube = (w, h, d, c, px, py, pz) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(c));
-      m.position.set(px, py, pz);
-      return m;
-    };
-
-    // Bosh
-    this._head = new THREE.Group();
-    this._head.position.set(0, 1.55, 0);
-    this._head.add(new THREE.Mesh(
-      new THREE.BoxGeometry(0.5, 0.5, 0.5), mat(0x4a7a3a)
-    ));
-    this.root.add(this._head);
-
-    // Tana
-    this._body = cube(0.46, 0.60, 0.26, 0x2a5a6a, 0, 1.00, 0);
-    this.root.add(this._body);
-
-    // Qo'llar
-    this._armR = cube(0.22, 0.58, 0.22, 0x2a5a6a, -0.34, 1.00, 0);
-    this._armL = cube(0.22, 0.58, 0.22, 0x2a5a6a,  0.34, 1.00, 0);
-    this.root.add(this._armR, this._armL);
-
-    // Oyoqlar
-    this._legR = cube(0.22, 0.58, 0.22, 0x1a2a4a, -0.115, 0.40, 0);
-    this._legL = cube(0.22, 0.58, 0.22, 0x1a2a4a,  0.115, 0.40, 0);
-    this.root.add(this._legR, this._legL);
-
-    this._origRot = {
-      armL: new THREE.Euler(), armR: new THREE.Euler(),
-      legL: new THREE.Euler(), legR: new THREE.Euler(),
-      head: new THREE.Euler(), headY: 1.55,
-    };
+  setHurt(isHurt) {
+    const color = isHurt ? 0xff5555 : null;
+    for (const m of this._hurtMats) {
+      if (isHurt) {
+        if (!m.userData._origColor) m.userData._origColor = m.color.getHex();
+        m.color.set(0xff5555);
+      } else if (m.userData._origColor !== undefined) {
+        m.color.set(m.userData._origColor);
+      }
+      m.needsUpdate = true;
+    }
   }
 
   dispose() {

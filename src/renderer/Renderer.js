@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { CHUNK_SIZE }    from '../world/Chunk.js';
 import { buildChunkMesh } from './ChunkMesher.js';
 import { createAvatar, SteveAvatar } from '../../avatars/index.js';
+// ProceduralAvatar — serverdan GLB yuklamaydi, pure THREE.js geometriya
 import { buildTextureAtlas } from '../world/TextureAtlas.js';
 import { ZombieAvatar } from '../entities/ZombieAvatar.js';
 import { SheepModel }   from '../entities/SheepModel.js';
@@ -572,6 +573,7 @@ export class Renderer {
       if (!this._otherPlayerModels.has(uid)) {
         const avatarId = pData.avatarId || 'steve';
         const model = createAvatar(this.scene, avatarId);
+        model.setVisible(true);
         this._otherPlayerModels.set(uid, { model, avatarId });
       } else {
         // Avatar o'zgarganda modalni almashtiramiz
@@ -580,6 +582,11 @@ export class Renderer {
         if (entry.avatarId !== newAvatarId) {
           entry.model.dispose();
           const model = createAvatar(this.scene, newAvatarId);
+          model.setVisible(true);
+          // Pozitsiyani darhol qo'yamiz — bir frame "nolda" korinmasin
+          if (pData.x !== undefined) {
+            model.update(pData.x, pData.y, pData.z, pData.yaw || 0, false, 0);
+          }
           this._otherPlayerModels.set(uid, { model, avatarId: newAvatarId });
         }
       }
@@ -588,18 +595,33 @@ export class Renderer {
 
   _tickOtherPlayers(dt) {
     for (const [uid, entry] of this._otherPlayerModels) {
-      // playersMap dan ma'lumot olish uchun _lastPlayersMap saqlaymiz
       const pData = this._lastPlayersMap?.get(uid);
       if (!pData) continue;
       const ghost = pData.isGhost || false;
-      // Ghost o'yinchilar yarim shaffof
-      const root = entry.model.root || entry.model.group;
-      if (root) {
-        root.traverse(obj => {
-          if (obj.material) obj.material.opacity = ghost ? 0.35 : 1.0;
-          if (obj.material) obj.material.transparent = ghost;
-        });
+
+      // Model ni ko'rinuvchi qilamiz
+      entry.model.setVisible(true);
+
+      // Ghost: ProceduralAvatar.setGhost() ishlatamiz (u needsUpdate ni to'g'ri qiladi)
+      if (typeof entry.model.setGhost === 'function') {
+        entry.model.setGhost(ghost);
+      } else {
+        // Fallback: qo'lda traverse (material array ni ham qo'llab-quvvatlaydi)
+        const root = entry.model.root || entry.model.group;
+        if (root) {
+          root.traverse(obj => {
+            if (!obj.isMesh) return;
+            const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+            mats.forEach(m => {
+              if (!m) return;
+              m.transparent = ghost;
+              m.opacity = ghost ? 0.35 : 1.0;
+              m.needsUpdate = true;
+            });
+          });
+        }
       }
+
       entry.model.update(pData.x, pData.y, pData.z, pData.yaw, !!pData.moving, dt);
     }
   }
