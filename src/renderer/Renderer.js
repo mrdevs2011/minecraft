@@ -554,12 +554,54 @@ export class Renderer {
     this.steve.setVisible(wasVisible);
   }
 
-  syncOtherPlayers(_playersMap) {
-    // Boshqa o'yinchilar o'chirilgan — faqat local steve ko'rinadi
+  syncOtherPlayers(playersMap) {
+    // Map ni tick uchun saqlaymiz
+    this._lastPlayersMap = playersMap;
+    const activeUids = new Set(playersMap.keys());
+
+    // O'chirilganlarni dispose qilish
+    for (const [uid, entry] of this._otherPlayerModels) {
+      if (!activeUids.has(uid)) {
+        entry.model.dispose();
+        this._otherPlayerModels.delete(uid);
+      }
+    }
+
+    // Yangilarini yaratish (avatarId ga qarab to'g'ri model)
+    for (const [uid, pData] of playersMap) {
+      if (!this._otherPlayerModels.has(uid)) {
+        const avatarId = pData.avatarId || 'steve';
+        const model = createAvatar(this.scene, avatarId);
+        this._otherPlayerModels.set(uid, { model, avatarId });
+      } else {
+        // Avatar o'zgarganda modalni almashtiramiz
+        const entry = this._otherPlayerModels.get(uid);
+        const newAvatarId = pData.avatarId || 'steve';
+        if (entry.avatarId !== newAvatarId) {
+          entry.model.dispose();
+          const model = createAvatar(this.scene, newAvatarId);
+          this._otherPlayerModels.set(uid, { model, avatarId: newAvatarId });
+        }
+      }
+    }
   }
 
-  _tickOtherPlayers(_dt) {
-    // Boshqa o'yinchilar o'chirilgan
+  _tickOtherPlayers(dt) {
+    for (const [uid, entry] of this._otherPlayerModels) {
+      // playersMap dan ma'lumot olish uchun _lastPlayersMap saqlaymiz
+      const pData = this._lastPlayersMap?.get(uid);
+      if (!pData) continue;
+      const ghost = pData.isGhost || false;
+      // Ghost o'yinchilar yarim shaffof
+      const root = entry.model.root || entry.model.group;
+      if (root) {
+        root.traverse(obj => {
+          if (obj.material) obj.material.opacity = ghost ? 0.35 : 1.0;
+          if (obj.material) obj.material.transparent = ghost;
+        });
+      }
+      entry.model.update(pData.x, pData.y, pData.z, pData.yaw, !!pData.moving, dt);
+    }
   }
 
   _updateSteve(player, moving, dt) {

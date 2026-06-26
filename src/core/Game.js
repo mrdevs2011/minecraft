@@ -165,14 +165,10 @@ export class Game {
 
     // ── Listen for other players ──────────────────────────────────────────
     if (this.user) {
-      // Realtime listener — o'z profilimiz o'zgarganda darhol qo'llanadi
-      // Avatar faqat Steve — profile dan o'qish kerak emas
-      // this._unsubscribeProfile = listenForUserProfile(...);
-
-      // Boshqa o'yinchilar ko'rsatilmaydi — multiplayer o'chirilgan
-      // this._unsubscribePlayers = listenForPlayers(this.user.uid, playersMap => {
-      //   this.renderer.syncOtherPlayers(playersMap);
-      // });
+      // Boshqa o'yinchilar — multiplayer yoqilgan
+      this._unsubscribePlayers = listenForPlayers(this.user.uid, playersMap => {
+        this.renderer.syncOtherPlayers(playersMap);
+      });
     }
 
     this.input.onEscape(() => this._togglePause());
