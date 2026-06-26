@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  BaseAvatar — Steve GLB model asosida barcha 8 avatar
@@ -33,15 +32,23 @@ function loadGLTF() {
   return _loadPromise;
 }
 
-// ─── Body part → rang mapping ────────────────────────────────────────────────
-// Har node qaysi rang kalitidan foydalanishini ko'rsatadi
-const NODE_COLOR_MAP = {
-  steve_head:      ['skin'],
-  steve_torso:     ['shirt'],
-  steve_arm_left:  ['shirt', 'armSkin'],   // yeng + qo'l
-  steve_arm_right: ['shirt', 'armSkin'],
-  steve_leg_left:  ['pants'],
-  steve_leg_right: ['pants'],
+// ─── Yangi steve.glb (textured, skeleton yo'q) — node nomlari ────────────────
+//  Object_4  → bosh (head)
+//  Object_6  → tana (torso)
+//  Object_8  → o'ng qo'l (arm right)
+//  Object_12 → chap qo'l (arm left)
+//  Object_10 → chap oyoq (leg left)
+//  Object_14 → o'ng oyoq (leg right)
+//
+//  Bu model o'z teksturasiga ega — rang bilan qoplanmaydi (ONLY_STEVE_MODE
+//  paytida original ko'rinishi saqlanishi kerak).
+const NODE_NAME_MAP = {
+  head:    'Object_4',
+  torso:   'Object_6',
+  armR:    'Object_8',
+  armL:    'Object_12',
+  legL:    'Object_10',
+  legR:    'Object_14',
 };
 
 export class BaseAvatar {
@@ -71,7 +78,7 @@ export class BaseAvatar {
     try {
       const gltf = await loadGLTF();
 
-      this._model = SkeletonUtils.clone(gltf.scene);
+      this._model = gltf.scene.clone(true);
       this._model.scale.setScalar(STEVE_SCALE);
 
       // Pastki markaz hisoblash
@@ -80,20 +87,20 @@ export class BaseAvatar {
 
       this.root.add(this._model);
 
-      // Node larni topamiz
+      // Node larni topamiz (yangi steve.glb — Object_4/6/8/10/12/14 nomlari)
       this._model.traverse(obj => {
         switch (obj.name) {
-          case 'steve_head':      this._head  = obj; break;
-          case 'steve_torso':     this._torso = obj; break;
-          case 'steve_arm_left':  this._armL  = obj; break;
-          case 'steve_arm_right': this._armR  = obj; break;
-          case 'steve_leg_left':  this._legL  = obj; break;
-          case 'steve_leg_right': this._legR  = obj; break;
+          case NODE_NAME_MAP.head:  this._head  = obj; break;
+          case NODE_NAME_MAP.torso: this._torso = obj; break;
+          case NODE_NAME_MAP.armR:  this._armR  = obj; break;
+          case NODE_NAME_MAP.armL:  this._armL  = obj; break;
+          case NODE_NAME_MAP.legL:  this._legL  = obj; break;
+          case NODE_NAME_MAP.legR:  this._legR  = obj; break;
         }
       });
 
-      // Ranglarni qo'llaymiz
-      this._applyColors();
+      // Original teksturani saqlaymiz — rang bilan qoplamaymiz
+      // (ONLY_STEVE_MODE: model o'zining haqiqiy ko'rinishida bo'lishi kerak)
 
       // Asl rotatsiyalarni saqlaymiz (GLB posed bo'lishi mumkin)
       this._origRot = {
