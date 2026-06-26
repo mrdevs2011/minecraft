@@ -152,7 +152,7 @@ export class MobManager {
       }
 
       // Kunduz zombilar quyoshdan qochadi (tezroq harakatlanmaydi, faqat spawn bo'lmaydi)
-      this._updateMob(mob, dt, player);
+      this._updateMob(mob, dt, player, this.mobs);
     }
 
     // ── Mob-mob separation ────────────────────────────────────────────────
@@ -258,7 +258,7 @@ export class MobManager {
     }
   }
 
-  _updateMob(mob, dt, player) {
+  _updateMob(mob, dt, player, mobs) {
     if (mob._hurtFlash > 0) {
       mob._hurtFlash -= dt;
       if (mob._hurtFlash < 0) mob._hurtFlash = 0;
@@ -268,7 +268,7 @@ export class MobManager {
     if (mob.type === 'sheep') {
       this._updateSheep(mob, dt);
     } else {
-      this._updateZombie(mob, dt, player);
+      this._updateZombie(mob, dt, player, mobs);
     }
 
     // Fizika — barcha moblar uchun
@@ -317,30 +317,50 @@ export class MobManager {
   }
 
   // ─── Zombi AI ─────────────────────────────────────────────────────────────
-  _updateZombie(mob, dt, player) {
-    const dx   = player.x - mob.x;
-    const dz   = player.z - mob.z;
-    const dist2D = Math.sqrt(dx * dx + dz * dz);
+  _updateZombie(mob, dt, player, mobs) {
+    const dxP  = player.x - mob.x;
+    const dzP  = player.z - mob.z;
+    const distPlayer = Math.sqrt(dxP * dxP + dzP * dzP);
 
-    const sees = dist2D < ZOMBIE_CHASE_DIST;
-    mob.isChasing = sees;
+    // O'yinchi yaqin bo'lsa — har doim o'yinchini ustuvor ta'qib qil
+    const seesPlayer = distPlayer < ZOMBIE_CHASE_DIST;
 
-    if (sees) {
+    // O'yinchi ko'rinmasa — eng yaqin qo'yni qidirish
+    let targetSheep = null;
+    if (!seesPlayer && mobs) {
+      let minDist = ZOMBIE_CHASE_DIST;
+      for (const other of mobs) {
+        if (other.dead || other.type !== 'sheep') continue;
+        const sdx = other.x - mob.x;
+        const sdz = other.z - mob.z;
+        const sd  = Math.sqrt(sdx * sdx + sdz * sdz);
+        if (sd < minDist) { minDist = sd; targetSheep = other; }
+      }
+    }
+
+    // Asosiy nishon: o'yinchi > qo'y > roam
+    const chaseTarget = seesPlayer ? player : targetSheep;
+    mob.isChasing = !!chaseTarget;
+
+    if (chaseTarget) {
+      const dx   = chaseTarget.x - mob.x;
+      const dz   = chaseTarget.z - mob.z;
+      const dist2D = Math.sqrt(dx * dx + dz * dz);
+
       mob._state   = 'chase';
-      mob._targetX = player.x;
-      mob._targetZ = player.z;
+      mob._targetX = chaseTarget.x;
+      mob._targetZ = chaseTarget.z;
 
-      const toPlayerAngle = Math.atan2(-dx, -dz);
-      let rawDiff = toPlayerAngle - mob.yaw;
-      while (rawDiff >  Math.PI) rawDiff -= Math.PI * 2;
-      while (rawDiff < -Math.PI) rawDiff += Math.PI * 2;
-      const maxHeadYaw = Math.PI * 0.39;
-      mob.headYaw = Math.max(-maxHeadYaw, Math.min(maxHeadYaw, rawDiff));
-
-      const playerEyeY = player.y + 1.62;
-      const zombieEyeY = mob.y + 1.6;
-      const dy3d       = playerEyeY - zombieEyeY;
-      mob.headPitch = Math.max(-0.4, Math.min(0.4, Math.atan2(dy3d, dist2D + 0.01)));
+      // Bosh burish — faqat o'yinchiga qaratamiz
+      if (seesPlayer) {
+        const toPlayerAngle = Math.atan2(-dx, -dz);
+        let rawDiff = toPlayerAngle - mob.yaw;
+        while (rawDiff >  Math.PI) rawDiff -= Math.PI * 2;
+        while (rawDiff < -Math.PI) rawDiff += Math.PI * 2;
+        mob.headYaw   = Math.max(-Math.PI * 0.39, Math.min(Math.PI * 0.39, rawDiff));
+        const dy3d    = (player.y + 1.62) - (mob.y + 1.6);
+        mob.headPitch = Math.max(-0.4, Math.min(0.4, Math.atan2(dy3d, dist2D + 0.01)));
+      }
 
       if (dist2D < ZOMBIE_ATTACK_DIST) {
         mob.moving = false;
@@ -349,12 +369,17 @@ export class MobManager {
 
         if (mob._attackCooldown <= 0) {
           mob._attackCooldown = ZOMBIE_ATTACK_CD;
-          player.takeDamage(ZOMBIE_ATTACK_DMG);
+          if (seesPlayer) {
+            player.takeDamage(ZOMBIE_ATTACK_DMG);
+          } else if (targetSheep) {
+            // Qo'yga zarar berish
+            targetSheep.takeDamage(ZOMBIE_ATTACK_DMG);
+          }
         }
       } else {
         mob.moving = true;
         mob.attackAnim = 0;
-        this._moveToward(mob, player.x, player.z, ZOMBIE_SPEED, dt);
+        this._moveToward(mob, chaseTarget.x, chaseTarget.z, ZOMBIE_SPEED, dt);
       }
 
     } else {

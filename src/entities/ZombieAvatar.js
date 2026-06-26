@@ -130,14 +130,13 @@ export class ZombieAvatar {
 
     // ── Qo'llar ───────────────────────────────────────────────────────────
     if (attackAnim > 0) {
-      // Zarba: ikkala qo'l oldinga ko'tariladi, so'ng tepa-pastga tebranadi
-      // attackAnim 0→1 sikl, sin bilan tepa-pastga (-0.3 ~ +0.3 rad)
-      const wave = Math.sin(attackAnim * Math.PI * 2) * 0.35;
-      // Qo'llar oldinga ko'tarilgan baza: -PI*0.55 (taxminan gorizontal)
-      // va wave qo'shilsa biroz yuqori-pastga tushadi
-      if (this._armL) this._armL.rotation.x = this._origRot.armL.x - Math.PI * 0.55 + wave;
-      if (this._armR) this._armR.rotation.x = this._origRot.armR.x - Math.PI * 0.55 + wave;
-      // Qo'llar biroz tashqariga yoyilgan (zombie klassik poza)
+      // Zarba: ikkala qo'l sinxron tepa-pastga tushadi
+      // attackAnim 0→1, qo'llar yuqoridan (−PI) pastga (−PI*0.3) tushadi va qaytadi
+      const t = attackAnim * Math.PI * 2;          // 0 → 2PI
+      const swing = -Math.PI * 0.65 - Math.sin(t) * Math.PI * 0.35;
+      // swing range: yuqori (~-PI) → pastga (~-PI*0.3)
+      if (this._armL) this._armL.rotation.x = this._origRot.armL.x + swing;
+      if (this._armR) this._armR.rotation.x = this._origRot.armR.x + swing;
       if (this._armL) this._armL.rotation.z =  0.18;
       if (this._armR) this._armR.rotation.z = -0.18;
     } else {
