@@ -12,6 +12,7 @@ import { fetchAllBlockChanges, pushBlockChange, listenForBlockChanges,
          saveUserInventory, loadUserInventory,
          startPositionAutoSave, stopPositionAutoSave, loadLastPosition } from './Firebase.js';
 import { InventoryScreen } from '../../inventoryScreen.js';
+import { getRandomAvatarId } from '../../avatars/index.js';
 
 // Sensitivity matches THREE.js PointerLockControls default
 const SENSITIVITY = 0.002;
@@ -33,7 +34,7 @@ export const DAWN_BURN_END = 0.27;
 export class Game {
   constructor(user = null) {
     this.user = user;
-    this.avatarId  = 'steve';   // updated after profile loads
+    this.avatarId  = getRandomAvatarId();  // Steve yoki Alex — tasodifiy
     this.canvas    = document.getElementById('game-canvas');
     this.running   = false;
     this.paused    = false;
@@ -58,6 +59,7 @@ export class Game {
     this.world     = new World();
     this.player    = new Player(this.world);
     this.renderer  = new Renderer(this.canvas, this.world, this.player);
+    this.renderer.setLocalAvatarId(this.avatarId); // Steve yoki Alex
     this.input     = new InputHandler(this.canvas);
     this.raycaster = new Raycaster(this.world);
     this.hud       = new HUD(this.player, this.user);
@@ -152,16 +154,13 @@ export class Game {
     // ── Listen for other players ──────────────────────────────────────────
     if (this.user) {
       // Realtime listener — o'z profilimiz o'zgarganda darhol qo'llanadi
-      this._unsubscribeProfile = listenForUserProfile(this.user.uid, profile => {
-        if (profile?.avatarId && profile.avatarId !== this.avatarId) {
-          this.avatarId = profile.avatarId;
-          this.renderer.setLocalAvatarId(profile.avatarId);
-        }
-      });
+      // Avatar faqat Steve — profile dan o'qish kerak emas
+      // this._unsubscribeProfile = listenForUserProfile(...);
 
-      this._unsubscribePlayers = listenForPlayers(this.user.uid, playersMap => {
-        this.renderer.syncOtherPlayers(playersMap);
-      });
+      // Boshqa o'yinchilar ko'rsatilmaydi — multiplayer o'chirilgan
+      // this._unsubscribePlayers = listenForPlayers(this.user.uid, playersMap => {
+      //   this.renderer.syncOtherPlayers(playersMap);
+      // });
     }
 
     this.input.onEscape(() => this._togglePause());

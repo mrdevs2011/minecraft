@@ -544,6 +544,14 @@ export class Renderer {
   setLocalAvatarId(avatarId) {
     if (!avatarId || this._localAvatarId === avatarId) return;
     this._localAvatarId = avatarId;
+    const wasVisible = this.steve.root.visible;
+    const pos = this.steve.root.position.clone();
+    const rot = this.steve.root.rotation.clone();
+    this.steve.dispose();
+    this.steve = createAvatar(this.scene, avatarId);
+    this.steve.root.position.copy(pos);
+    this.steve.root.rotation.copy(rot);
+    this.steve.setVisible(wasVisible);
 
     const wasVisible = this.steve.root.visible;
     const pos = this.steve.root.position.clone();
@@ -556,96 +564,12 @@ export class Renderer {
     this.steve.setVisible(wasVisible);
   }
 
-  syncOtherPlayers(playersMap) {
-    for (const [uid, entry] of this._otherPlayerModels) {
-      if (!playersMap.has(uid)) {
-        entry.model.dispose();
-        if (entry.labelEl && entry.labelEl.parentNode) {
-          entry.labelEl.parentNode.removeChild(entry.labelEl);
-        }
-        this._otherPlayerModels.delete(uid);
-      }
-    }
-
-    for (const [uid, data] of playersMap) {
-      if (!this._otherPlayerModels.has(uid)) {
-        const model = createAvatar(this.scene, data.avatarId || 'steve');
-
-        const labelEl = document.createElement('div');
-        labelEl.className = 'player-label';
-        labelEl.textContent = data.displayName || 'Player';
-        labelEl.style.cssText = [
-          'position:absolute',
-          'pointer-events:none',
-          'color:#fff',
-          'font-size:11px',
-          'font-family:monospace',
-          'background:rgba(0,0,0,0.5)',
-          'padding:1px 5px',
-          'border-radius:3px',
-          'white-space:nowrap',
-          'transform:translate(-50%,-100%)',
-          'display:none',
-        ].join(';');
-        this.canvas.parentElement?.appendChild(labelEl);
-
-        this._otherPlayerModels.set(uid, {
-          model, data, labelEl, _animTime: 0,
-          cur: { x: data.x, y: data.y, z: data.z, yaw: data.yaw },
-          tgt: { x: data.x, y: data.y, z: data.z, yaw: data.yaw },
-        });
-      }
-
-      const entry = this._otherPlayerModels.get(uid);
-      if (data.avatarId && entry.data.avatarId !== data.avatarId) {
-        entry.model.dispose();
-        entry.model = createAvatar(this.scene, data.avatarId);
-      }
-      entry.tgt.x   = data.x;
-      entry.tgt.y   = data.y;
-      entry.tgt.z   = data.z;
-      entry.tgt.yaw = data.yaw;
-      entry.data    = data;
-    }
+  syncOtherPlayers(_playersMap) {
+    // Boshqa o'yinchilar o'chirilgan — faqat local steve ko'rinadi
   }
 
-  _tickOtherPlayers(dt) {
-    const LERP = 12;
-
-    for (const [, entry] of this._otherPlayerModels) {
-      const { data, model, labelEl, cur, tgt } = entry;
-
-      const t = Math.min(1, LERP * dt);
-      cur.x += (tgt.x - cur.x) * t;
-      cur.y += (tgt.y - cur.y) * t;
-      cur.z += (tgt.z - cur.z) * t;
-
-      let dyaw = tgt.yaw - cur.yaw;
-      while (dyaw >  Math.PI) dyaw -= Math.PI * 2;
-      while (dyaw < -Math.PI) dyaw += Math.PI * 2;
-      cur.yaw += dyaw * t;
-
-      model.update(cur.x, cur.y, cur.z, cur.yaw, !!data.moving, dt);
-
-      const isGhost = !!data.isGhost;
-      model.setGhost(isGhost);
-
-      if (labelEl) {
-        const worldPos  = new THREE.Vector3(cur.x, cur.y + 2.4, cur.z);
-        const projected = worldPos.project(this.camera);
-        if (projected.z < 1) {
-          const hw = this.canvas.clientWidth  / 2;
-          const hh = this.canvas.clientHeight / 2;
-          const sx = Math.round( projected.x * hw + hw);
-          const sy = Math.round(-projected.y * hh + hh);
-          labelEl.style.left    = sx + 'px';
-          labelEl.style.top     = sy + 'px';
-          labelEl.style.display = 'block';
-        } else {
-          labelEl.style.display = 'none';
-        }
-      }
-    }
+  _tickOtherPlayers(_dt) {
+    // Boshqa o'yinchilar o'chirilgan
   }
 
   _updateSteve(player, moving, dt) {
