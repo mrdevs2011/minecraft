@@ -552,16 +552,6 @@ export class Renderer {
     this.steve.root.position.copy(pos);
     this.steve.root.rotation.copy(rot);
     this.steve.setVisible(wasVisible);
-
-    const wasVisible = this.steve.root.visible;
-    const pos = this.steve.root.position.clone();
-    const rot = this.steve.root.rotation.clone();
-
-    this.steve.dispose();
-    this.steve = createAvatar(this.scene, avatarId);
-    this.steve.root.position.copy(pos);
-    this.steve.root.rotation.copy(rot);
-    this.steve.setVisible(wasVisible);
   }
 
   syncOtherPlayers(_playersMap) {
