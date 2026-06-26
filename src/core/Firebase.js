@@ -353,30 +353,112 @@ export function pushChunkToCache(cx, cz, uint8data) {
   }).catch(err => console.error('[MRLocal] Chunk push failed:', err));
 }
 
-// ─── Game Clock — haqiqiy real vaqt (Unix timestamp) ──────────────────────────
-// Date.now() barcha clientlarda bir xil (UTC), refresh ta'sir qilmaydi.
-// Callback: { dayNumber, hours, minutes, seconds, dayFraction }
+// ─── Game Clock — O'yin vaqti tizimi ─────────────────────────────────────────
+//
+// Nisbat: 1 real soat = 1 o'yin daqiqasi
+//         24 real soat = 24 o'yin daqiqasi (to'liq bir kun)
+//         Boshqacha aytganda: 1 real sekund ≈ 1/60 o'yin daqiqasi
+//
+// O'yin vaqti real UTC dan hisoblangan "o'yin minutlari" orqali topiladi.
+// Har bir real sekund o'tganda o'yin soatida 1/3600 soat (ya'ni 1 sekunda ≈ 0.4 o'yin sekunda) o'tadi.
+// Aniqroq: gameSeconds = realSeconds * (1440 / 86400) = realSeconds / 60
+// Shunday qilib 24 real soat = 24 o'yin daqiqasi to'liq kunni beradi.
+//
+// Fasl (mavsim) haqiqiy UTC sanasiga qarab aniqlanadi:
+//   Bahor: mart–may    Yoz: iyun–avgust
+//   Kuz:   sentabr–noyabr   Qish: dekabr–fevral
+//
+// Har bir fasldagi quyosh chiqishi/botishi o'rtacha vaqti (o'yin vaqtida):
+//   Bahor:  chiqish 06:00,  botish 19:15
+//   Yoz:    chiqish 05:15,  botish 20:00
+//   Kuz:    chiqish 06:45,  botish 18:15
+//   Qish:   chiqish 07:30,  botish 17:30
 
 let _clockInterval = null;
 
 // O'yin epoch: 1 Yanvar 2024 = Day 1
 const GAME_EPOCH_MS = new Date('2024-01-01T00:00:00Z').getTime();
 
+// Real UTC oy raqamiga (0–11) qarab fasl qaytaradi
+function _getSeason(utcMonth) {
+  if (utcMonth >= 2 && utcMonth <= 4) return 'spring';  // mart–may
+  if (utcMonth >= 5 && utcMonth <= 7) return 'summer';  // iyun–avgust
+  if (utcMonth >= 8 && utcMonth <= 10) return 'autumn'; // sentabr–noyabr
+  return 'winter';                                        // dekabr–fevral
+}
+
+// Har bir fasl uchun quyosh chiqishi va botish vaqti (o'yin soatlarida, onli son)
+const SEASON_TIMES = {
+  spring: { sunrise: 6.00,  sunset: 19.25 },  // 06:00 / 19:15
+  summer: { sunrise: 5.25,  sunset: 20.00 },  // 05:15 / 20:00
+  autumn: { sunrise: 6.75,  sunset: 18.25 },  // 06:45 / 18:15
+  winter: { sunrise: 7.50,  sunset: 17.50 },  // 07:30 / 17:30
+};
+
+// O'yin soatini 0..1 (dayFraction) formatiga o'tkazadi
+// 0.0 = yarim tun (00:00), 0.5 = tush (12:00), 1.0 = yana yarim tun
+function _hoursToDayFraction(hours) {
+  return hours / 24;
+}
+
 export function listenForClock(callback) {
   function tick() {
-    const now  = Date.now();
-    const ms   = now - GAME_EPOCH_MS;
-    const totalSeconds = Math.floor(ms / 1000);
-    const dayNumber    = Math.floor(ms / 86400000) + 1;
+    const now = Date.now();
 
-    // UTC soat
-    const d       = new Date(now);
-    const hours   = d.getUTCHours();
-    const minutes = d.getUTCMinutes();
-    const seconds = d.getUTCSeconds();
+    // Real sekunddan o'yin sekundiga: nisbat 1/60 (1 real soat = 1 o'yin daqiqasi)
+    const realSeconds  = (now - GAME_EPOCH_MS) / 1000;
+    const gameSeconds  = realSeconds / 60; // 1 real sekund = 1/60 o'yin daqiqasi
 
-    const dayFraction = (hours * 3600 + minutes * 60 + seconds) / 86400;
-    callback({ dayNumber, hours, minutes, seconds, dayFraction, totalSeconds });
+    // O'yin kuni (1 dan boshlanadi): har 24 o'yin daqiqada yangi kun
+    // 24 o'yin daqiqasi = 24 * 60 = 1440 real sekund = 24 real daqiqa
+    const GAME_DAY_REAL_SECONDS = 24 * 60; // 1440 real sekund = 1 o'yin kuni
+    const dayNumber = Math.floor(realSeconds / GAME_DAY_REAL_SECONDS) + 1;
+
+    // O'yin soati: 0..24 oralig'ida
+    const gameSecondsInDay = realSeconds % GAME_DAY_REAL_SECONDS;
+    const gameHoursFloat   = (gameSecondsInDay / GAME_DAY_REAL_SECONDS) * 24;
+
+    const hours   = Math.floor(gameHoursFloat);
+    const minutes = Math.floor((gameHoursFloat - hours) * 60);
+    const seconds = Math.floor(((gameHoursFloat - hours) * 60 - minutes) * 60);
+
+    // Fasl (haqiqiy UTC sanasiga qarab)
+    const realDate = new Date(now);
+    const season   = _getSeason(realDate.getUTCMonth());
+    const { sunrise, sunset } = SEASON_TIMES[season];
+
+    // dayFraction: 0 = yarim tun, 0.5 = tush
+    const dayFraction = _hoursToDayFraction(gameHoursFloat);
+
+    // Kun yoki tun ekanligini aniqlash uchun quyosh holati
+    const isSunrise = gameHoursFloat >= sunrise && gameHoursFloat < sunrise + 0.5;
+    const isSunset  = gameHoursFloat >= sunset  && gameHoursFloat < sunset  + 0.5;
+    const isDay     = gameHoursFloat >= sunrise  && gameHoursFloat < sunset;
+    const isNight   = !isDay;
+
+    // Sunrise/sunset fractioni (0..1) — silliq o'tish uchun
+    let sunriseFraction = 0;
+    let sunsetFraction  = 0;
+    if (isSunrise) sunriseFraction = (gameHoursFloat - sunrise) / 0.5;
+    if (isSunset)  sunsetFraction  = (gameHoursFloat - sunset)  / 0.5;
+
+    callback({
+      dayNumber,
+      hours,
+      minutes,
+      seconds,
+      dayFraction,
+      totalSeconds: Math.floor(gameSeconds),
+      season,
+      sunrise,
+      sunset,
+      isDay,
+      isNight,
+      isSunrise,
+      isSunset,
+      sunriseFraction,
+      sunsetFraction,
+    });
   }
 
   tick(); // darhol chaqir

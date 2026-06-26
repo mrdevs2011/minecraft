@@ -18,16 +18,17 @@ const SENSITIVITY = 0.002;
 const TWO_PI      = Math.PI * 2;
 
 // ── Kun/Tun sikli ─────────────────────────────────────────────────────────
-// 24 daqiqa = 1440 sekund to'liq sikl
-// dayFraction:  0.0 = tong (6:00), 0.25 = tush (12:00),
-//               0.5 = kechqurun (18:00), 0.75 = yarim tun (0:00)
-export const DAY_CYCLE  = 1440;   // sekundlarda
-export const DAWN_START = 0.0;    // tong boshi
-export const DAY_START  = 0.04;   // to'liq kun (tong tugadi)
-export const DUSK_START = 0.46;   // kechqurun boshi
-export const NIGHT_START = 0.50;  // tun boshi
+// 1 real soat = 1 o'yin daqiqasi (24 real soat = 24 o'yin daqiqasi = 1 to'liq kun)
+// dayFraction: 0.0 = yarim tun (00:00), 0.25 = tongdan keyin (06:00),
+//              0.5 = tush (12:00), 0.75 = kechqurun (18:00)
+// Quyosh chiqishi/botishi fasliga qarab o'zgaradi (Firebase.js SEASON_TIMES)
+export const DAY_CYCLE   = 1440;  // sekundlarda (24 daqiqa = to'liq 1 o'yin kuni)
+export const DAWN_START  = 0.21;  // ~ 05:00 — erta tong (eng erta fasl)
+export const DAY_START   = 0.25;  // ~ 06:00 — to'liq kunduz (eng kech fasl: 07:30)
+export const DUSK_START  = 0.72;  // ~ 17:15 — kechqurun boshi (eng erta: 17:30)
+export const NIGHT_START = 0.83;  // ~ 20:00 — to'liq tun (eng kech: 20:00)
 // Zombi yonib ketish: dayFraction 0..DAWN_BURN zonasida (tong payti)
-export const DAWN_BURN_END = 0.05;
+export const DAWN_BURN_END = 0.27;
 
 export class Game {
   constructor(user = null) {

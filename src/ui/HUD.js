@@ -253,10 +253,25 @@ export class HUD {
   updateClock(clockData) {
     const el = document.getElementById('game-clock');
     if (!el) return;
-    // clockData: { dayNumber, hours, minutes }
-    const hh  = String(clockData.hours).padStart(2, '0');
-    const mm  = String(clockData.minutes).padStart(2, '0');
-    el.textContent = `Day ${clockData.dayNumber}  ${hh}:${mm}`;
+
+    const hh = String(clockData.hours).padStart(2, '0');
+    const mm = String(clockData.minutes).padStart(2, '0');
+
+    // Fasl belgisi
+    const seasonEmoji = {
+      spring: '🌸',
+      summer: '☀️',
+      autumn: '🍂',
+      winter: '❄️',
+    }[clockData.season] || '';
+
+    // Kun/tun belgisi
+    let timeIcon = '🌙';
+    if (clockData.isSunrise)      timeIcon = '🌅';
+    else if (clockData.isSunset)  timeIcon = '🌇';
+    else if (clockData.isDay)     timeIcon = '☀️';
+
+    el.textContent = `${seasonEmoji} Kun ${clockData.dayNumber}  ${hh}:${mm} ${timeIcon}`;
   }
 
   update() {
