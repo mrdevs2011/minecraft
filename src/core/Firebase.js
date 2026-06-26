@@ -354,26 +354,35 @@ export function pushChunkToCache(cx, cz, uint8data) {
 }
 
 // ─── Game Clock — O'yin vaqti tizimi ─────────────────────────────────────────
-// Epoch Firestore da 'game/epoch' documentida saqlanadi — barcha clientlar bir xil
-// epoch ni ko'radi. Birinchi client epoch ni yozadi, qolganlar o'qiydi.
-// Epoch bir marta o'rnatilgach hech qachon o'zgarmaydi (reset qilmasdan).
+// Epoch MRLocal serverda saqlanadi (/mc/epoch endpoint).
+// Firestore ga birorta so'rov yuborilmaydi — limit tugamaydi.
+// Birinchi o'yinchi epoch ni yaratadi, qolganlar o'sha epochni oladi.
+// Epoch = o'yin Kun 0 ning real vaqtdagi ms qiymati.
 
 let _clockInterval = null;
 let _gameEpochMs   = null; // null = hali yuklanmagan
 
-// Firestore dan epoch ni o'qib/yaratib, clock ni ishga tushiradi
 async function _initEpoch() {
   try {
-    const epochRef  = doc(db, 'game', 'epoch');
-    const epochSnap = await getDoc(epochRef);
-    if (epochSnap.exists()) {
-      _gameEpochMs = epochSnap.data().startMs;
-    } else {
-      _gameEpochMs = Date.now();
-      await setDoc(epochRef, { startMs: _gameEpochMs });
+    // MRLocal dan epoch ni o'qishga urinib ko'r
+    const res = await fetch(`${_mrLocalUrl}/mc/epoch`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.startMs) {
+        _gameEpochMs = data.startMs;
+        return;
+      }
     }
+    // Endpoint yo'q yoki epoch hali yaratilmagan — biz yaratamiz
+    _gameEpochMs = Date.now();
+    await fetch(`${_mrLocalUrl}/mc/epoch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ startMs: _gameEpochMs }),
+    });
   } catch (err) {
-    console.warn('[Clock] Epoch o\'qishda xato, hozirgi vaqt ishlatiladi:', err.message);
+    // MRLocal ishlamayapti — hozirgi vaqtni fallback sifatida ishlatamiz
+    console.warn('[Clock] Epoch serverdan olinmadi, lokal vaqt ishlatiladi:', err.message);
     _gameEpochMs = Date.now();
   }
 }
