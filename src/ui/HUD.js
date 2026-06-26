@@ -7,6 +7,7 @@ export class HUD {
     this._buildViewIndicator();
     this._initPlayerBadge(user || window._mcUser);
     this._buildClock();
+    this._buildDamageOverlay();
   }
 
   _initPlayerBadge(user) {
@@ -68,6 +69,35 @@ export class HUD {
     ].join(';');
     clock.textContent = '00:00';
     document.body.appendChild(clock);
+  }
+
+  _buildDamageOverlay() {
+    if (document.getElementById('damage-overlay')) return;
+    const el = document.createElement('div');
+    el.id = 'damage-overlay';
+    el.style.cssText = [
+      'position:fixed',
+      'top:0', 'left:0', 'width:100%', 'height:100%',
+      'background:rgba(255,0,0,0.35)',
+      'opacity:0',
+      'pointer-events:none',
+      'z-index:9998',
+      'transition:opacity 0.35s ease-out',
+    ].join(';');
+    document.body.appendChild(el);
+  }
+
+  // Zarba olganda ekranni qisqa muddat qizil rangda chaqnatadi
+  flashDamage() {
+    const el = document.getElementById('damage-overlay');
+    if (!el) return;
+    el.style.transition = 'none';
+    el.style.opacity = '1';
+    // Keyingi frame'da fade-out yoqamiz
+    requestAnimationFrame(() => {
+      el.style.transition = 'opacity 0.35s ease-out';
+      el.style.opacity = '0';
+    });
   }
 
   updateClock(totalSeconds) {
