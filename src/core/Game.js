@@ -17,6 +17,18 @@ import { InventoryScreen } from '../../inventoryScreen.js';
 const SENSITIVITY = 0.002;
 const TWO_PI      = Math.PI * 2;
 
+// ── Kun/Tun sikli ─────────────────────────────────────────────────────────
+// 24 daqiqa = 1440 sekund to'liq sikl
+// dayFraction:  0.0 = tong (6:00), 0.25 = tush (12:00),
+//               0.5 = kechqurun (18:00), 0.75 = yarim tun (0:00)
+export const DAY_CYCLE  = 1440;   // sekundlarda
+export const DAWN_START = 0.0;    // tong boshi
+export const DAY_START  = 0.04;   // to'liq kun (tong tugadi)
+export const DUSK_START = 0.46;   // kechqurun boshi
+export const NIGHT_START = 0.50;  // tun boshi
+// Zombi yonib ketish: dayFraction 0..DAWN_BURN zonasida (tong payti)
+export const DAWN_BURN_END = 0.05;
+
 export class Game {
   constructor(user = null) {
     this.user = user;
@@ -35,6 +47,9 @@ export class Game {
     this._unsubscribeClock = null;
     this._touchAimScreen = null; // {x,y} — mobil: barmoq turgan ekran nuqtasi (aim/highlight uchun)
     this._lastAttackTime = 0;    // mob larga zarba berish orasidagi "punch" cooldown uchun
+    // Kun/tun vaqti: real UTC dan keladi (listenForClock orqali)
+    this.gameTime     = 0;  // sekund (0..DAY_CYCLE)
+    this._dayFraction = 0;  // 0..1 (0=yarim tun, 0.5=tush)
   }
 
   start() {
@@ -181,9 +196,11 @@ export class Game {
     };
     document.addEventListener('visibilitychange', this._onVisibilityChange);
 
-    // ── Shared game clock ─────────────────────────────────────────────────
-    this._unsubscribeClock = listenForClock(seconds => {
-      this.hud.updateClock(seconds);
+    // ── Shared game clock — real UTC vaqt ────────────────────────────────
+    this._unsubscribeClock = listenForClock(clockData => {
+      this.gameTime     = clockData.dayFraction * DAY_CYCLE; // 0..1440
+      this._dayFraction = clockData.dayFraction;             // 0..1 (sun position)
+      this.hud.updateClock(clockData);
     });
 
     window.addEventListener('contextmenu', e => e.preventDefault());
@@ -353,6 +370,8 @@ export class Game {
   }
 
   _update(dt) {
+    // dayFraction — listenForClock orqali sekundiga bir marta yangilanadi (real UTC)
+    const dayFraction = this._dayFraction;
     const mouse = this.input.consumeMouse();
 
     // ─── Correct FPS camera from THREE.js PointerLockControls source ───
@@ -396,7 +415,7 @@ export class Game {
 
     // ── Mob lar (qo'y, zombi) AI/fizika tiki ────────────────────────────────
     const healthBefore = this.player.health;
-    this.mobManager.update(dt, this.player);
+    this.mobManager.update(dt, this.player, dayFraction);
     if (this.player.health < healthBefore) {
       this.hud.flashDamage();
     }
@@ -426,7 +445,8 @@ export class Game {
     const hit = this._touchAimScreen
       ? this._raycastAtScreen(this._touchAimScreen.x, this._touchAimScreen.y)
       : this._raycast();
-    this.renderer.render(this.player, hit, this._moving, this._dt, this.mobManager.mobs);
+    const dayFraction = this._dayFraction;
+    this.renderer.render(this.player, hit, this._moving, this._dt, this.mobManager.mobs, dayFraction);
     this.hud.update();
   }
 

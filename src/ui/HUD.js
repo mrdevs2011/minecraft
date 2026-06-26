@@ -250,12 +250,13 @@ export class HUD {
     });
   }
 
-  updateClock(totalSeconds) {
+  updateClock(clockData) {
     const el = document.getElementById('game-clock');
     if (!el) return;
-    const m = Math.floor(totalSeconds / 60) % 60;
-    const s = totalSeconds % 60;
-    el.textContent = String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+    // clockData: { dayNumber, hours, minutes }
+    const hh  = String(clockData.hours).padStart(2, '0');
+    const mm  = String(clockData.minutes).padStart(2, '0');
+    el.textContent = `Day ${clockData.dayNumber}  ${hh}:${mm}`;
   }
 
   update() {

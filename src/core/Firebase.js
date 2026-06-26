@@ -353,29 +353,35 @@ export function pushChunkToCache(cx, cz, uint8data) {
   }).catch(err => console.error('[MRLocal] Chunk push failed:', err));
 }
 
-// ─── Game Clock (MRLocal) ─────────────────────────────────────────────────────
+// ─── Game Clock — haqiqiy real vaqt (Unix timestamp) ──────────────────────────
+// Date.now() barcha clientlarda bir xil (UTC), refresh ta'sir qilmaydi.
+// Callback: { dayNumber, hours, minutes, seconds, dayFraction }
 
 let _clockInterval = null;
-let _clockSeconds  = 0;
+
+// O'yin epoch: 1 Yanvar 2024 = Day 1
+const GAME_EPOCH_MS = new Date('2024-01-01T00:00:00Z').getTime();
 
 export function listenForClock(callback) {
-  fetch(`${_mrLocalUrl}/mc/clock`)
-    .then(r => r.ok ? r.json() : null)
-    .then(data => { if (data?.seconds) _clockSeconds = data.seconds; })
-    .catch(() => {});
+  function tick() {
+    const now  = Date.now();
+    const ms   = now - GAME_EPOCH_MS;
+    const totalSeconds = Math.floor(ms / 1000);
+    const dayNumber    = Math.floor(ms / 86400000) + 1;
 
+    // UTC soat
+    const d       = new Date(now);
+    const hours   = d.getUTCHours();
+    const minutes = d.getUTCMinutes();
+    const seconds = d.getUTCSeconds();
+
+    const dayFraction = (hours * 3600 + minutes * 60 + seconds) / 86400;
+    callback({ dayNumber, hours, minutes, seconds, dayFraction, totalSeconds });
+  }
+
+  tick(); // darhol chaqir
   if (_clockInterval) clearInterval(_clockInterval);
-  _clockInterval = setInterval(() => {
-    _clockSeconds++;
-    callback(_clockSeconds);
-    if (_clockSeconds % 30 === 0) {
-      fetch(`${_mrLocalUrl}/mc/clock`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ seconds: _clockSeconds }),
-      }).catch(() => {});
-    }
-  }, 1000);
+  _clockInterval = setInterval(tick, 1000);
 
   return () => {
     if (_clockInterval) { clearInterval(_clockInterval); _clockInterval = null; }

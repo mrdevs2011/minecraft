@@ -186,7 +186,8 @@ export class Renderer {
     this._tmpSphere      = new THREE.Sphere();
 
     // ── Lighting (ambient faqat — AO shaderda boshqariladi) ──
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
+    this.scene.add(this.ambientLight);
     this.sun = new THREE.DirectionalLight(0xffffff, 0.85);
     this.sun.position.set(80, 150, 60);
     this.scene.add(this.sun);
@@ -196,6 +197,12 @@ export class Renderer {
     const sunMat  = new THREE.MeshBasicMaterial({ color: 0xfff3a0, fog: false });
     this.sunMesh  = new THREE.Mesh(sunGeom, sunMat);
     this.scene.add(this.sunMesh);
+
+    // ── Moon disc ──
+    const moonGeom = new THREE.SphereGeometry(14, 16, 16);
+    const moonMat  = new THREE.MeshBasicMaterial({ color: 0xe8e8ff, fog: false });
+    this.moonMesh  = new THREE.Mesh(moonGeom, moonMat);
+    this.scene.add(this.moonMesh);
 
     // ── TextureAtlas ──
     const atlas = buildTextureAtlas();
@@ -310,7 +317,7 @@ export class Renderer {
     };
   }
 
-  render(player, raycastResult, moving, dt, mobs) {
+  render(player, raycastResult, moving, dt, mobs, dayFraction = 0.25) {
     this._updateSteve(player, moving, dt || 0.016);
     this._syncCamera(player);
     this._updateChunks(player);
@@ -318,12 +325,67 @@ export class Renderer {
     this._tickOtherPlayers(dt || 0.016);
     this._tickMobs(mobs || [], dt || 0.016);
 
-    const t = performance.now() * 0.00005;
+    // ── Kun/Tun: quyosh va oy pozitsiyasi ────────────────────────────────
+    // dayFraction: 0=yarim tun(00:00), 0.25=tong(06:00), 0.5=tush(12:00), 0.75=kech(18:00)
+    // Quyosh 0.25(6am)→0.5(12pm)→0.75(6pm) orasida ko'rinadi — yarim aylana
+    // sunAngle: 0 = gorizont, PI/2 = tepa
+    const sunAngle  = ((dayFraction - 0.25) / 0.5) * Math.PI; // 0(6am)..PI(6pm)
+    const moonAngle = ((dayFraction + 0.25) / 0.5) * Math.PI; // teskari
+    const orbitR    = 300;
     this.sunMesh.position.set(
-      player.x + Math.cos(t) * 300,
-      220,
-      player.z + Math.sin(t) * 300
+      player.x,
+      Math.sin(sunAngle) * orbitR,
+      player.z + Math.cos(sunAngle) * orbitR
     );
+    this.moonMesh.position.set(
+      player.x,
+      -Math.sin(sunAngle) * orbitR,
+      player.z - Math.cos(sunAngle) * orbitR
+    );
+
+    // ── Kun/Tun: osmon rangi va yoritish ─────────────────────────────────
+    // Kunduz: 06:00-18:00 (0.25..0.75), Tun: qolgan vaqt
+    const isNight = dayFraction >= 0.75 || dayFraction < 0.25;
+
+    // Tong (0.23..0.27) va Shom (0.73..0.77) transition
+    const dawnT = dayFraction >= 0.23 && dayFraction <= 0.27
+      ? Math.sin(((dayFraction - 0.23) / 0.04) * Math.PI * 0.5) : (dayFraction > 0.27 ? 1 : 0);
+    const duskT = dayFraction >= 0.73 && dayFraction <= 0.77
+      ? Math.sin(((dayFraction - 0.73) / 0.04) * Math.PI * 0.5) : (dayFraction > 0.77 || dayFraction < 0.23 ? 1 : 0);
+
+    const skyDay   = new THREE.Color(0x87ceeb);
+    const skyDawn  = new THREE.Color(0xff7733);
+    const skyNight = new THREE.Color(0x060a18);
+
+    let skyColor;
+    if (dayFraction >= 0.27 && dayFraction < 0.73) {
+      // To'liq kunduz
+      skyColor = skyDay.clone();
+    } else if (dayFraction >= 0.23 && dayFraction < 0.27) {
+      // Tong: tun->tong rangi->kun
+      skyColor = skyNight.clone().lerp(skyDawn, dawnT).lerp(skyDay, Math.max(0, dawnT - 0.5) * 2);
+    } else if (dayFraction >= 0.73 && dayFraction < 0.77) {
+      // Shom: kun->tong rangi->tun
+      skyColor = skyDay.clone().lerp(skyDawn, duskT).lerp(skyNight, Math.max(0, duskT - 0.5) * 2);
+    } else {
+      skyColor = skyNight.clone();
+    }
+
+    // Ambient yorug'lik
+    let ambientI;
+    if (dayFraction >= 0.27 && dayFraction < 0.73) {
+      ambientI = 0.55;
+    } else if (dayFraction >= 0.23 && dayFraction < 0.27) {
+      ambientI = 0.08 + 0.47 * dawnT;
+    } else if (dayFraction >= 0.73 && dayFraction < 0.77) {
+      ambientI = 0.55 - 0.47 * duskT;
+    } else {
+      ambientI = 0.08;
+    }
+    this.ambientLight.intensity = ambientI;
+
+    // Quyosh yorug'ligi: faqat kunduz
+    this.sun.intensity = isNight ? 0 : 0.85 * Math.max(0, Math.sin(sunAngle));
 
     if (this.waterMat.uniforms) {
       this.waterMat.uniforms.uTime.value += (dt || 0.016);
@@ -334,7 +396,9 @@ export class Renderer {
     if (player.inWater) {
       fogColor = 0x123d6e; fogNear = 1.5; fogFar = 14;
     } else {
-      fogColor = 0x87ceeb; fogNear = 80; fogFar = 180;
+      fogColor = skyColor.getHex();
+      fogNear = isNight ? 40 : 80;
+      fogFar  = isNight ? 120 : 180;
     }
 
     this.scene.background = new THREE.Color(fogColor);

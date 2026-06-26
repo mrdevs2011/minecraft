@@ -5,6 +5,15 @@
 const MAX_SHEEP   = 6;
 const MAX_ZOMBIES = 4;
 
+// Tun boshi/tun oxiri (dayFraction = seconds_since_midnight / 86400)
+// Kunduz: 06:00–18:00 (0.25..0.75), Tun: 18:00–06:00 (0.75..1.0 va 0.0..0.25)
+const NIGHT_START_F = 0.75;  // 18:00
+const DAY_START_F   = 0.25;  // 06:00
+const DAWN_BURN_F_START = 0.25; // tong boshi: 06:00
+const DAWN_BURN_F_END   = 0.27; // tong: 06:29 gacha zombilar yonadi (~30 daqiqa)
+// Zombi yonish: sekundiga necha HP yo'qoladi
+const ZOMBIE_BURN_DPS = 4;
+
 const SHEEP_SPEED   = 2.2;
 const ZOMBIE_SPEED  = 2.8;
 
@@ -79,15 +88,18 @@ export class MobManager {
     this._respawnQueue = [];
     // Drop callback: Game.js tomonidan o'rnatiladi
     this.onMobDrop = null;
+    // Kun/tun holati
+    this._dayFraction   = 0;      // 0..1
+    this._wasNight      = false;  // oldingi frameda tun edimi
+    this._zombieCount   = 0;      // hozirgi tirik zombilar soni
   }
 
   init(playerX, playerZ) {
     for (let i = 0; i < MAX_SHEEP; i++) {
       this._spawnMob('sheep', playerX, playerZ);
     }
-    for (let i = 0; i < MAX_ZOMBIES; i++) {
-      this._spawnMob('zombie', playerX, playerZ, 12, 24);
-    }
+    // Zombilar faqat tunda spawn bo'ladi — init tong paytida, shuning uchun chiqmasin
+    // (o'yinchi tunda boshlasa kerak bo'lsa, update() avtomatik spawnlaydi)
   }
 
   _spawnMob(type, cx, cz, minR = 6, maxR = 20) {
@@ -108,10 +120,38 @@ export class MobManager {
     return null;
   }
 
-  update(dt, player) {
+  update(dt, player, dayFraction = 0) {
+    this._dayFraction = dayFraction;
+    // Tun: 18:00–06:00 (dayFraction >= 0.75 yoki < 0.25)
+    const isNight   = dayFraction >= NIGHT_START_F || dayFraction < DAY_START_F;
+    // Tong yonish: 06:00–06:29 (tong quyoshi chiqqanda zombilar yonadi)
+    const isBurning = dayFraction >= DAWN_BURN_F_START && dayFraction < DAWN_BURN_F_END;
+
+    // ── Tun boshida zombilarni spawn qilish ───────────────────────────────
+    if (isNight && !this._wasNight) {
+      // Tun boshlandi — zombilarni to'ldirish
+      const zombieCount = this.mobs.filter(m => !m.dead && m.type === 'zombie').length;
+      const toSpawn = MAX_ZOMBIES - zombieCount;
+      for (let i = 0; i < toSpawn; i++) {
+        this._spawnMob('zombie', player.x, player.z, 12, 28);
+      }
+      console.log('[MobManager] Tun boshlandi — zombilar keldi!');
+    }
+    this._wasNight = isNight;
+
     // ── Tirik moblarni yangilash ──────────────────────────────────────────
     for (const mob of this.mobs) {
       if (mob.dead) continue;
+
+      // Tong payti zombilar yonadi 🔥
+      if (mob.type === 'zombie' && isBurning) {
+        mob.takeDamage(ZOMBIE_BURN_DPS * dt);
+        mob._burning = true;
+      } else if (mob.type === 'zombie') {
+        mob._burning = false;
+      }
+
+      // Kunduz zombilar quyoshdan qochadi (tezroq harakatlanmaydi, faqat spawn bo'lmaydi)
       this._updateMob(mob, dt, player);
     }
 
@@ -144,6 +184,11 @@ export class MobManager {
     // ── Respawn navbatini tikish ──────────────────────────────────────────
     for (let i = this._respawnQueue.length - 1; i >= 0; i--) {
       const entry = this._respawnQueue[i];
+      // Zombilar faqat tunda qayta paydo bo'ladi
+      if (entry.type === 'zombie' && !isNight) {
+        // Tun kelguncha kut
+        continue;
+      }
       entry.timer -= dt;
       if (entry.timer <= 0) {
         const newMob = this._spawnMob(entry.type, entry.spawnX, entry.spawnZ, 8, 22);
