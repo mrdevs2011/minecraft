@@ -1,4 +1,4 @@
-import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import * as THREE from 'three';
 import { CHUNK_SIZE }    from '../world/Chunk.js';
 import { buildChunkMesh } from './ChunkMesher.js';
 import { createAvatar, SteveAvatar } from '../../avatars/index.js';

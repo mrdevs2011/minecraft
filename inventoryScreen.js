@@ -1,4 +1,4 @@
-import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import * as THREE from 'three';
 
 // ─── Item colour / shape catalogue ───────────────────────────────────────────
 // For non-block items we define a colour + shape so we can draw them in 3D

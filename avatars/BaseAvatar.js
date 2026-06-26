@@ -1,221 +1,148 @@
-import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Shared utility helpers
-// ─────────────────────────────────────────────────────────────────────────────
-function mat(hex) {
-  return new THREE.MeshLambertMaterial({ color: hex });
-}
-
-function box(w, h, d, color, px = 0, py = 0, pz = 0) {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(color));
-  mesh.position.set(px, py, pz);
-  return mesh;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Color config (C) shape expected by BaseAvatar
-// ─────────────────────────────────────────────────────────────────────────────
-//  skin, skinDark          – face / body skin tones
-//  hair, hairMid           – hair colors (dark base, mid highlight)
-//  eyeWhite, eyePupil, eyeBrow
-//  beard                   – lip / facial accent (can equal skinDark for no-beard look)
-//  shirt, shirtDark        – top / shirt front and sides
-//  pants, pantsDark        – trousers
-//  boot, bootDark          – footwear
-//  armSkin, armShad        – forearm skin (defaults to skin/skinDark)
+//  BaseAvatar — Steve GLB model asosida barcha 8 avatar
 //
-//  opts (optional):
-//    slimArms : boolean  — Alex-style 3px-wide arms
-//    hairLength : 'short' | 'normal' | 'long'  — adds extra lower hair pieces
+//  GLB fayl: models/steve.glb
+//  Node nomlar: steve_head, steve_torso, steve_arm_left, steve_arm_right,
+//               steve_leg_left, steve_leg_right
+//
+//  Har avatar o'zining ranglar (C) ob'ektini beradi.
+//  GLB teksturasi o'chiriladi → rang kod orqali beriladi.
 // ─────────────────────────────────────────────────────────────────────────────
+
+const GLB_PATH   = 'models/steve.glb';
+const STEVE_SCALE = 1.0;
+
+const _loader = new GLTFLoader();
+let _gltfCache   = null;
+let _loadPromise = null;
+
+function loadGLTF() {
+  if (_gltfCache)   return Promise.resolve(_gltfCache);
+  if (_loadPromise) return _loadPromise;
+  _loadPromise = new Promise((resolve, reject) => {
+    _loader.load(GLB_PATH,
+      gltf => { _gltfCache = gltf; resolve(gltf); },
+      undefined,
+      err  => { console.error('[BaseAvatar] GLB yuklanmadi:', err); reject(err); }
+    );
+  });
+  return _loadPromise;
+}
+
+// ─── Body part → rang mapping ────────────────────────────────────────────────
+// Har node qaysi rang kalitidan foydalanishini ko'rsatadi
+const NODE_COLOR_MAP = {
+  steve_head:      ['skin'],
+  steve_torso:     ['shirt'],
+  steve_arm_left:  ['shirt', 'armSkin'],   // yeng + qo'l
+  steve_arm_right: ['shirt', 'armSkin'],
+  steve_leg_left:  ['pants'],
+  steve_leg_right: ['pants'],
+};
+
 export class BaseAvatar {
   constructor(scene, C, opts = {}) {
-    this.scene = scene;
-    this._time = 0;
-    this._C    = C;
-    this._opts = { slimArms: false, hairLength: 'normal', ...opts };
+    this.scene  = scene;
+    this._C     = C;
+    this._opts  = { slimArms: false, hairLength: 'normal', ...opts };
+    this._time  = 0;
+    this._isGhost = false;
+    this._ready = false;
+
+    // Part node havolalari (yuklagandan keyin to'ldiriladi)
+    this._head     = null;
+    this._torso    = null;
+    this._armL     = null;
+    this._armR     = null;
+    this._legL     = null;
+    this._legR     = null;
 
     this.root = new THREE.Group();
     scene.add(this.root);
-    this._isGhost = false;
 
-    this._buildHead();
-    this._buildBody();
-    this._buildArms();
-    this._buildLegs();
+    this._load();
   }
 
-  // ── HEAD ──────────────────────────────────────────────────────────────────
-  _buildHead() {
-    const C = this._C;
-    this.headPivot = new THREE.Group();
-    this.headPivot.position.y = 1.55;
-    this.root.add(this.headPivot);
+  async _load() {
+    try {
+      const gltf = await loadGLTF();
 
-    // Base skull
-    const head = box(0.5, 0.5, 0.5, C.skin);
-    this.headPivot.add(head);
+      this._model = gltf.scene.clone(true);
+      this._model.scale.setScalar(STEVE_SCALE);
 
-    // ── Hair ──
-    const hairTop  = box(0.52, 0.08, 0.52, C.hair,    0,     0.27,  0);
-    const hairBack = box(0.52, 0.44, 0.06, C.hair,    0,     0.02, -0.27);
-    this.headPivot.add(hairTop, hairBack);
+      // Pastki markaz hisoblash
+      const bbox = new THREE.Box3().setFromObject(this._model);
+      this._model.position.y = -bbox.min.y;
 
-    const sideH = this._opts.hairLength === 'long' ? 0.56 : 0.44;
-    const sideY = this._opts.hairLength === 'long' ? -0.04 : 0.02;
-    const hairL = box(0.06, sideH, 0.52, C.hairMid, -0.27, sideY, 0);
-    const hairR = box(0.06, sideH, 0.52, C.hairMid,  0.27, sideY, 0);
-    this.headPivot.add(hairL, hairR);
+      this.root.add(this._model);
 
-    // Front forehead fringe
-    const hairFront = box(0.52, 0.10, 0.04, C.hairMid, 0, 0.18, 0.26);
-    this.headPivot.add(hairFront);
+      // Node larni topamiz
+      this._model.traverse(obj => {
+        switch (obj.name) {
+          case 'steve_head':      this._head  = obj; break;
+          case 'steve_torso':     this._torso = obj; break;
+          case 'steve_arm_left':  this._armL  = obj; break;
+          case 'steve_arm_right': this._armR  = obj; break;
+          case 'steve_leg_left':  this._legL  = obj; break;
+          case 'steve_leg_right': this._legR  = obj; break;
+        }
+      });
 
-    // Extra lower pieces for long hair (Alex, Kai, etc.)
-    if (this._opts.hairLength === 'long') {
-      const llL = box(0.08, 0.20, 0.50, C.hair, -0.28, -0.28, 0);
-      const llR = box(0.08, 0.20, 0.50, C.hair,  0.28, -0.28, 0);
-      const llB = box(0.52, 0.20, 0.08, C.hair,  0,    -0.28, -0.28);
-      this.headPivot.add(llL, llR, llB);
+      // Ranglarni qo'llaymiz
+      this._applyColors();
+
+      // Asl rotatsiyalarni saqlaymiz (GLB posed bo'lishi mumkin)
+      this._origRot = {
+        armL: this._armL?.rotation.clone(),
+        armR: this._armR?.rotation.clone(),
+        legL: this._legL?.rotation.clone(),
+        legR: this._legR?.rotation.clone(),
+        head: this._head?.position.clone(),
+      };
+
+      this._ready = true;
+
+    } catch (e) {
+      console.warn('[BaseAvatar] GLB yuklanmadi, fallback ishlatiladi');
+      this._buildFallback();
+      this._ready = true;
     }
-
-    // ── Face ──
-
-    // Eyes – white
-    const eyeGW = new THREE.BoxGeometry(0.13, 0.10, 0.02);
-    const eyeMW = mat(C.eyeWhite ?? 0xffffff);
-    const eyeL = new THREE.Mesh(eyeGW, eyeMW); eyeL.position.set(-0.11, 0.07, 0.251);
-    const eyeR = new THREE.Mesh(eyeGW, eyeMW); eyeR.position.set( 0.11, 0.07, 0.251);
-    this.headPivot.add(eyeL, eyeR);
-
-    // Eyes – coloured pupil
-    const eyeGP = new THREE.BoxGeometry(0.07, 0.07, 0.022);
-    const eyeMP = mat(C.eyePupil);
-    const pupilL = new THREE.Mesh(eyeGP, eyeMP); pupilL.position.set(-0.11, 0.07, 0.252);
-    const pupilR = new THREE.Mesh(eyeGP, eyeMP); pupilR.position.set( 0.11, 0.07, 0.252);
-    this.headPivot.add(pupilL, pupilR);
-
-    // Eyebrows
-    const browG = new THREE.BoxGeometry(0.15, 0.04, 0.022);
-    const browM = mat(C.eyeBrow ?? 0x2a1800);
-    const browL = new THREE.Mesh(browG, browM); browL.position.set(-0.11, 0.135, 0.252);
-    const browR = new THREE.Mesh(browG, browM); browR.position.set( 0.11, 0.135, 0.252);
-    this.headPivot.add(browL, browR);
-
-    // Nose
-    const nose = box(0.06, 0.08, 0.04, C.skinDark, 0, -0.02, 0.265);
-    this.headPivot.add(nose);
-
-    // Mouth / lip accent
-    const mouth  = box(0.16, 0.04, 0.022, C.beard ?? C.skinDark, 0, -0.10, 0.252);
-    const beard1 = box(0.20, 0.06, 0.022, C.beard ?? C.skinDark, 0, -0.15, 0.252);
-    this.headPivot.add(mouth, beard1);
-
-    // Cheek shading
-    const cheekL = box(0.04, 0.10, 0.06, C.skinDark, -0.24, -0.02, 0.22);
-    const cheekR = box(0.04, 0.10, 0.06, C.skinDark,  0.24, -0.02, 0.22);
-    this.headPivot.add(cheekL, cheekR);
-
-    // Side shading strips
-    const sideL2 = box(0.02, 0.50, 0.50, C.skinDark, -0.25, 0, 0);
-    const sideR2 = box(0.02, 0.50, 0.50, C.skinDark,  0.25, 0, 0);
-    this.headPivot.add(sideL2, sideR2);
-
-    this.head = this.headPivot; // alias for external access
   }
 
-  // ── BODY ──────────────────────────────────────────────────────────────────
-  _buildBody() {
+  // ── Rang qo'llash ──────────────────────────────────────────────────────────
+  _applyColors() {
     const C = this._C;
-    this.bodyGroup = new THREE.Group();
-    this.bodyGroup.position.y = 1.00;
-    this.root.add(this.bodyGroup);
 
-    const body = box(0.46, 0.60, 0.26, C.shirt);
-    this.bodyGroup.add(body);
+    // Har node ga rang berish
+    const setNodeColor = (node, color) => {
+      if (!node) return;
+      node.traverse(obj => {
+        if (!obj.isMesh) return;
+        // Material klonlaymiz — boshqa avatarlar bilan aralashmasin
+        obj.material = obj.material.clone();
+        obj.material.color.set(color);
+        obj.material.map = null; // teksturani o'chiramiz
+        obj.material.needsUpdate = true;
+      });
+    };
 
-    const sideL = box(0.02, 0.60, 0.26, C.shirtDark, -0.24, 0, 0);
-    const sideR = box(0.02, 0.60, 0.26, C.shirtDark,  0.24, 0, 0);
-    const back  = box(0.46, 0.60, 0.02, C.shirtDark,  0, 0, -0.14);
-    this.bodyGroup.add(sideL, sideR, back);
-
-    // Belt / waist strip
-    const belt = box(0.47, 0.07, 0.28, C.pantsDark, 0, -0.27, 0);
-    this.bodyGroup.add(belt);
-
-    this.body = this.bodyGroup;
+    setNodeColor(this._head,  C.skin);
+    setNodeColor(this._torso, C.shirt);
+    setNodeColor(this._armL,  C.shirt);
+    setNodeColor(this._armR,  C.shirt);
+    setNodeColor(this._legL,  C.pants);
+    setNodeColor(this._legR,  C.pants);
   }
 
-  // ── ARMS ──────────────────────────────────────────────────────────────────
-  _buildArms() {
-    const C    = this._C;
-    const slim = this._opts.slimArms;
-    const armW = slim ? 0.18 : 0.22;
-    const armH = 0.58;
-    const armD = slim ? 0.18 : 0.22;
-    const armSkin = C.armSkin ?? C.skin;
-    const armShad = C.armShad ?? C.skinDark;
-
-    // Body is 0.46 wide → half = 0.23. Arm pivot sits flush against body side.
-    // Pivot is at shoulder top; everything hangs DOWN (negative Y offsets).
-    const shoulderX = 0.23 + armW / 2;
-
-    // ── Right arm (player's right = -x) ──
-    this.rightArmPivot = new THREE.Group();
-    this.rightArmPivot.position.set(-shoulderX, 1.28, 0);
-    this.root.add(this.rightArmPivot);
-
-    const rSleeve  = box(armW, armH * 0.52, armD,        C.shirt,  0,        -(armH * 0.52) / 2,               0);
-    const rArm     = box(armW, armH * 0.48, armD,        armSkin,  0,        -(armH * 0.52) - (armH * 0.48) / 2, 0);
-    const rArmSide = box(0.02, armH,        armD,        armShad, -armW / 2, -armH / 2,                        0);
-    const rHand    = box(armW, 0.10,        armD + 0.02, armSkin,  0,        -armH - 0.05,                     0);
-    this.rightArmPivot.add(rSleeve, rArm, rArmSide, rHand);
-
-    // ── Left arm (+x) ──
-    this.leftArmPivot = new THREE.Group();
-    this.leftArmPivot.position.set(shoulderX, 1.28, 0);
-    this.root.add(this.leftArmPivot);
-
-    const lSleeve  = box(armW, armH * 0.52, armD,        C.shirt,  0,       -(armH * 0.52) / 2,               0);
-    const lArm     = box(armW, armH * 0.48, armD,        armSkin,  0,       -(armH * 0.52) - (armH * 0.48) / 2, 0);
-    const lArmSide = box(0.02, armH,        armD,        armShad,  armW / 2, -armH / 2,                        0);
-    const lHand    = box(armW, 0.10,        armD + 0.02, armSkin,  0,       -armH - 0.05,                      0);
-    this.leftArmPivot.add(lSleeve, lArm, lArmSide, lHand);
-  }
-
-  // ── LEGS ──────────────────────────────────────────────────────────────────
-  _buildLegs() {
-    const C = this._C;
-    const legW = 0.22, legH = 0.58, legD = 0.22;
-
-    // Right leg (-x)
-    this.rightLegPivot = new THREE.Group();
-    this.rightLegPivot.position.set(-0.115, 0.74, 0);
-    this.root.add(this.rightLegPivot);
-
-    const rLeg     = box(legW, legH, legD,          C.pants,    0,          -legH / 2,      0);
-    const rLegSide = box(0.02, legH, legD,          C.pantsDark, -legW / 2, -legH / 2,      0);
-    const rBoot    = box(legW + 0.02, 0.15, legD + 0.04, C.boot, 0,        -legH + 0.05,  0.01);
-    const rBootSide= box(0.02, 0.15, legD + 0.04,  C.bootDark,  -legW / 2, -legH + 0.05,  0.01);
-    this.rightLegPivot.add(rLeg, rLegSide, rBoot, rBootSide);
-
-    // Left leg (+x)
-    this.leftLegPivot = new THREE.Group();
-    this.leftLegPivot.position.set(0.115, 0.74, 0);
-    this.root.add(this.leftLegPivot);
-
-    const lLeg     = box(legW, legH, legD,          C.pants,    0,         -legH / 2,      0);
-    const lLegSide = box(0.02, legH, legD,          C.pantsDark, legW / 2, -legH / 2,      0);
-    const lBoot    = box(legW + 0.02, 0.15, legD + 0.04, C.boot, 0,       -legH + 0.05,  0.01);
-    const lBootSide= box(0.02, 0.15, legD + 0.04,  C.bootDark,  legW / 2, -legH + 0.05,  0.01);
-    this.leftLegPivot.add(lLeg, lLegSide, lBoot, lBootSide);
-  }
-
-  // ── UPDATE (per frame) ───────────────────────────────────────────────────
+  // ── UPDATE (har frame) ────────────────────────────────────────────────────
   update(x, y, z, yaw, moving, dt) {
     this.root.position.set(x, y, z);
     this.root.rotation.y = yaw + Math.PI;
+
+    if (!this._ready) return;
 
     if (moving) {
       this._time += dt * 9;
@@ -225,30 +152,31 @@ export class BaseAvatar {
 
     const swing = moving ? Math.sin(this._time) * 0.65 : 0;
 
-    this.rightArmPivot.rotation.x =  swing;
-    this.leftArmPivot.rotation.x  = -swing;
-    this.rightLegPivot.rotation.x = -swing;
-    this.leftLegPivot.rotation.x  =  swing;
+    // Qo'llar va oyoqlar tebranishi
+    if (this._armR) this._armR.rotation.x = (this._origRot?.armR?.x ?? 0) + swing;
+    if (this._armL) this._armL.rotation.x = (this._origRot?.armL?.x ?? 0) - swing;
+    if (this._legR) this._legR.rotation.x = (this._origRot?.legR?.x ?? 0) - swing;
+    if (this._legL) this._legL.rotation.x = (this._origRot?.legL?.x ?? 0) + swing;
 
-    this.rightArmPivot.rotation.z = moving ? -0.05 : 0;
-    this.leftArmPivot.rotation.z  = moving ?  0.05 : 0;
+    // Qo'llar biroz tashqariga
+    if (this._armR) this._armR.rotation.z = moving ? -0.05 : 0;
+    if (this._armL) this._armL.rotation.z = moving ?  0.05 : 0;
 
-    const bobY = moving ? Math.abs(Math.sin(this._time * 2)) * 0.018 : 0;
-    this.headPivot.position.y = 1.55 + bobY;
+    // Bosh bob (yuqori-pastga)
+    if (this._head) {
+      const bobY = moving ? Math.abs(Math.sin(this._time * 2)) * 0.018 : 0;
+      this._head.position.y = (this._origRot?.head?.y ?? this._head.position.y) + bobY;
+    }
 
-    this.bodyGroup.rotation.x = moving ? 0.03 : 0;
+    // Tana biroz oldinga egiladi
+    if (this._torso) this._torso.rotation.x = moving ? 0.03 : 0;
   }
 
   setVisible(v) { this.root.visible = v; }
 
-  /**
-   * Ghost effect: boshqa o'yinchi tab'ni yashirgan (yoki uzoq vaqt
-   * harakatsiz) bo'lsa, modelni yarim shaffof va oqartirilgan rangda
-   * ko'rsatamiz. Original ranglar bir martalik keshlanadi, shu sababli
-   * oldingi holatga to'liq aniq qaytarish mumkin.
-   */
+  // ── Ghost mode ─────────────────────────────────────────────────────────────
   setGhost(isGhost) {
-    if (this._isGhost === !!isGhost) return; // hech narsa o'zgarmadi
+    if (this._isGhost === !!isGhost) return;
     this._isGhost = !!isGhost;
 
     this.root.traverse(obj => {
@@ -257,7 +185,7 @@ export class BaseAvatar {
 
       if (!obj.userData._ghostOrig) {
         obj.userData._ghostOrig = {
-          color:       mat.color ? mat.color.clone() : null,
+          color:       mat.color?.clone(),
           opacity:     mat.opacity,
           transparent: mat.transparent,
         };
@@ -275,8 +203,54 @@ export class BaseAvatar {
         mat.opacity = orig.opacity;
         if (mat.color && orig.color) mat.color.copy(orig.color);
       }
+      mat.needsUpdate = true;
     });
   }
 
-  dispose() { this.scene.remove(this.root); }
+  // ── Fallback — GLB yuklanmasa ──────────────────────────────────────────────
+  _buildFallback() {
+    const C   = this._C;
+    const mat = c => new THREE.MeshLambertMaterial({ color: c });
+    const cube = (w, h, d, c, px, py, pz) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(c));
+      m.position.set(px, py, pz);
+      return m;
+    };
+
+    // Bosh
+    const head = cube(0.50, 0.50, 0.50, C.skin, 0, 1.55, 0);
+    this.root.add(head);
+    this._head = head;
+
+    // Tana
+    const torso = cube(0.46, 0.60, 0.26, C.shirt, 0, 1.00, 0);
+    this.root.add(torso);
+    this._torso = torso;
+
+    // Qo'llar
+    this._armR = cube(0.22, 0.58, 0.22, C.shirt, -0.34, 1.00, 0);
+    this._armL = cube(0.22, 0.58, 0.22, C.shirt,  0.34, 1.00, 0);
+    this.root.add(this._armR, this._armL);
+
+    // Oyoqlar
+    this._legR = cube(0.22, 0.58, 0.22, C.pants, -0.115, 0.40, 0);
+    this._legL = cube(0.22, 0.58, 0.22, C.pants,  0.115, 0.40, 0);
+    this.root.add(this._legR, this._legL);
+
+    this._origRot = {
+      armL: new THREE.Euler(), armR: new THREE.Euler(),
+      legL: new THREE.Euler(), legR: new THREE.Euler(),
+      head: head.position.clone(),
+    };
+  }
+
+  dispose() {
+    this.scene.remove(this.root);
+    this.root.traverse(obj => {
+      if (obj.isMesh) {
+        obj.geometry?.dispose();
+        obj.material?.dispose();
+      }
+    });
+  }
 }

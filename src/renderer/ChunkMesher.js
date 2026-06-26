@@ -1,4 +1,4 @@
-import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import * as THREE from 'three';
 import { CHUNK_SIZE, CHUNK_HEIGHT } from '../world/Chunk.js';
 import { getBlock, BLOCK_AIR, BLOCK_WATER, BLOCK_GLASS, BLOCK_LEAVES } from '../world/Blocks.js';
 import { FLUID_MAX } from '../world/FluidSimulator.js';
