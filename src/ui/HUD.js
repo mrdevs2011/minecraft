@@ -168,7 +168,7 @@ export class HUD {
     this._buildViewIndicator();
     this._initPlayerBadge(user || window._mcUser);
     this._buildClock();
-    this._buildDamageOverlay();
+    this.initDamageOverlay();
   }
 
   _initPlayerBadge(user) {

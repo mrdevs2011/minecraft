@@ -77,6 +77,22 @@ async function boot() {
   // ── 4.5. MRLocal URL ni yuklash (Cloudflare tunnel yoki localhost) ────────
   await initMrLocalUrl();
 
+  // ── 4.6. Server yoniq-yo'qligini tekshirish ──────────────────────────────
+  {
+    const { getMrLocalUrl } = await import('./core/Firebase.js');
+    let serverOnline = false;
+    try {
+      const res = await fetch(`${getMrLocalUrl()}/mc/clock`, { signal: AbortSignal.timeout(4000) });
+      serverOnline = res.ok;
+    } catch (_) {}
+
+    if (!serverOnline) {
+      document.getElementById('loading-screen').classList.add('hidden');
+      document.getElementById('server-off-screen').classList.remove('hidden');
+      return; // boot to'xtaydi
+    }
+  }
+
   // ── 5. Loading screen ─────────────────────────────────────────────────────
   loadingScreen.classList.remove('hidden');
 
