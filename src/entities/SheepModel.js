@@ -9,7 +9,7 @@ import { SkeletonUtils } from 'three/addons/utils/SkeletonUtils.js';
 //  Animatsiya yo'q — oyoqlar (leg1–leg4) va bosh kod orqali tebratiladi
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SHEEP_SCALE = 0.18;    // GLB model o'lchami
+const SHEEP_SCALE = 1.0;     // GLB model o'lchami (model allaqachon to'g'ri o'lchamda)
 const GLB_PATH    = 'models/sheep.glb';
 
 const loader = new GLTFLoader();

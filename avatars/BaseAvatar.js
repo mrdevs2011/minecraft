@@ -175,6 +175,17 @@ export class BaseAvatar {
 
   setVisible(v) { this.root.visible = v; }
 
+  // ── 1st-person rejim — faqat qo'llar ko'rinadi (boshqa qismlar yashiriladi) ──
+  setFirstPersonMode(active) {
+    if (this._head)  this._head.visible  = !active;
+    if (this._torso) this._torso.visible = !active;
+    if (this._legL)  this._legL.visible  = !active;
+    if (this._legR)  this._legR.visible  = !active;
+    // Qo'llar har doim ko'rinadi (1st-personda ham, 3rd-personda ham)
+    if (this._armL)  this._armL.visible  = true;
+    if (this._armR)  this._armR.visible  = true;
+  }
+
   // ── Ghost mode ─────────────────────────────────────────────────────────────
   setGhost(isGhost) {
     if (this._isGhost === !!isGhost) return;
