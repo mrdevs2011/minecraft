@@ -34,15 +34,19 @@ class HotbarRenderer {
   // Bir slot uchun scene + camera + cube yaratadi
   _buildSlotScene(blockId) {
     const scene  = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 100);
-    camera.position.set(1.6, 1.4, 2.2);
+    const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
+    // Minecraft hotbar ko'rinishi: pastdan qarash — top yuz katta, yon yuzlar pastda
+    camera.position.set(1.8, -1.2, 2.4);
     camera.lookAt(0, 0, 0);
 
-    // Ambient + yo'nalishli yorug'lik (top yuz yorqinroq)
-    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
-    dirLight.position.set(1.5, 3, 2);
-    scene.add(dirLight);
+    // Minecraft uslubi yorug'lik: top yuz eng yorqin, yon yuzlar qoraygan
+    scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+    const dirTop = new THREE.DirectionalLight(0xffffff, 1.1);
+    dirTop.position.set(0, 1, 0);   // to'g'ridan yuqoridan — top yuzni yorqin qiladi
+    scene.add(dirTop);
+    const dirFront = new THREE.DirectionalLight(0xffffff, 0.55);
+    dirFront.position.set(1, 0, 1); // old-o'ng yon yuzga
+    scene.add(dirFront);
 
     const cube = this._makeCube(blockId);
     if (cube) scene.add(cube);
@@ -80,8 +84,8 @@ class HotbarRenderer {
 
     const geo  = new THREE.BoxGeometry(1, 1, 1);
     const mesh = new THREE.Mesh(geo, materials);
-    mesh.rotation.x = 0.4;
-    mesh.rotation.y = -Math.PI / 4;
+    mesh.rotation.x = -0.55;   // yuqorini ko'rsatish uchun oldinga egiladi (manfiy = pastdan qarash)
+    mesh.rotation.y = Math.PI / 4;  // 45° aylantirilgan — chap/o'ng yon yuzlar teng ko'rinadi
     return mesh;
   }
 

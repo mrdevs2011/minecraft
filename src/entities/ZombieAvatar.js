@@ -14,7 +14,7 @@ import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 //    z_leg_r  → o'ng oyoq
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ZOMBIE_SCALE = 0.011;
+const ZOMBIE_SCALE = 0.25;   // Steve bilan bir xil: raw H=8, scale 0.25 → 2 blok balandlik
 const GLB_PATH     = 'models/zombie.glb';
 
 const _loader = new GLTFLoader();
