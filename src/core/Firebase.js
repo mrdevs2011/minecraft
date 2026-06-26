@@ -122,7 +122,7 @@ function _reconnectWebSocket() {
 }
 
 // ─── Avatar helpers ───────────────────────────────────────────────────────────
-const AVATAR_IDS = ['steve', 'alex', 'ari', 'noor', 'makena', 'efe', 'zuri', 'kai'];
+const AVATAR_IDS = ['steve', 'alex', 'dream'];
 function randomAvatarId() {
   return AVATAR_IDS[Math.floor(Math.random() * AVATAR_IDS.length)];
 }

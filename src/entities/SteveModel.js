@@ -1,3 +1,3 @@
-// SteveModel — avatars/BaseAvatar (GLB) asosida
-// Renderer.js "SteveModel" nomini import qiladi — shu wrapper saqlab qo'yilgan
+// SteveModel — GLB asosida (steve.glb orqali yuklanadi)
+// Renderer.js "SteveModel" nomini import qiladi
 export { SteveAvatar as SteveModel } from '../../avatars/steve.js';
