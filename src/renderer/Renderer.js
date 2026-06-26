@@ -471,8 +471,7 @@ export class Renderer {
   }
 
   _updateSteve(player, moving, dt) {
-    this.steve.setVisible(true);
-    this.steve.setFirstPersonMode?.(this._viewMode === 'first');
+    this.steve.setVisible(this._viewMode === 'third');
     this.steve.update(player.x, player.y, player.z, player.yaw, !!moving, dt);
   }
 
