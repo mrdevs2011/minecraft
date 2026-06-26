@@ -10,7 +10,7 @@ import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 //                 'z_armature|t-pose' — turib turish
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ZOMBIE_SCALE = 0.011;   // GLB model o'lchami (kichraytirish)
+const ZOMBIE_SCALE = 0.25;   // Steve bilan bir xil kattalik (Steve SCALE = 0.25)
 const GLB_PATH     = 'models/zombie.glb';
 
 const loader = new GLTFLoader();
