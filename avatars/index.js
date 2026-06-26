@@ -32,11 +32,17 @@ export const AVATAR_CLASS_MAP = {
   kai:    KaiAvatar,
 };
 
+// ─── VAQTINCHA: faqat Steve ishlatiladi ──────────────────────────────────────
+// Boshqa 7 avatar keyinroq birma-bir qo'shiladi. Hozircha hamma o'yinchi
+// — qaysi avatarId saqlangan bo'lishidan qat'i nazar — Steve sifatida ko'rinadi.
+const ONLY_STEVE_MODE = true;
+
 /**
  * Returns a random avatar ID string.
  * Called once when a new user account is created.
  */
 export function getRandomAvatarId() {
+  if (ONLY_STEVE_MODE) return 'steve';
   return AVATAR_IDS[Math.floor(Math.random() * AVATAR_IDS.length)];
 }
 
@@ -49,6 +55,7 @@ export function getRandomAvatarId() {
  * @returns {BaseAvatar}
  */
 export function createAvatar(scene, avatarId) {
+  if (ONLY_STEVE_MODE) return new SteveAvatar(scene);
   const AvatarClass = AVATAR_CLASS_MAP[avatarId] ?? SteveAvatar;
   return new AvatarClass(scene);
 }
