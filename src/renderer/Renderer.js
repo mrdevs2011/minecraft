@@ -437,7 +437,7 @@ export class Renderer {
     this._updateChunks(player);
     this._updateHighlight(raycastResult);
     this._tickOtherPlayers(dt || 0.016);
-    this._tickMobs(mobs || [], dt || 0.016);
+    this._tickMobs(mobs || [], dt || 0.016, player);
 
     // ── Kun/Tun: quyosh va oy pozitsiyasi ────────────────────────────────
     // dayFraction: 0=yarim tun(00:00), 0.25=tong(06:00), 0.5=tush(12:00), 0.75=kech(18:00)
@@ -655,8 +655,14 @@ export class Renderer {
 
   // Game.js dagi MobManager.mobs ro'yxatini THREE modellariga sinxronlaydi:
   // yangi mob lar uchun model yaratadi, o'lgan/yo'qolgan lar uchun dispose qiladi.
-  _tickMobs(mobs, dt) {
+  _tickMobs(mobs, dt, player) {
     const aliveIds = new Set();
+
+    // O'yinchi turgan chunk koordinatalari
+    const playerCx = player ? Math.floor(player.x / CHUNK_SIZE) : 0;
+    const playerCz = player ? Math.floor(player.z / CHUNK_SIZE) : 0;
+    // Ko'rinish radiusi
+    const visRadius = this.world.renderDistance;
 
     for (const mob of mobs) {
       aliveIds.add(mob.id);
@@ -666,6 +672,24 @@ export class Renderer {
         entry = { model };
         this._mobModels.set(mob.id, entry);
       }
+
+      // Mob turgan chunk koordinatalari
+      const mobCx = Math.floor(mob.x / CHUNK_SIZE);
+      const mobCz = Math.floor(mob.z / CHUNK_SIZE);
+
+      // Chunk yetkazilganmi? Yo'q bo'lsa — mobni yashiramiz (havoda suzib ko'rinmasin)
+      const chunkKey    = `${mobCx},${mobCz}`;
+      const chunkLoaded = this.chunkMeshes.has(chunkKey);
+      const inVisRange  = Math.abs(mobCx - playerCx) <= visRadius &&
+                          Math.abs(mobCz - playerCz) <= visRadius;
+      const isVisible   = chunkLoaded && inVisRange;
+
+      // THREE modeli visibility ni yangilash
+      const root = entry.model.root || entry.model.group;
+      if (root) root.visible = isVisible;
+
+      if (!isVisible) continue; // Ko'rinmasa animatsiya ham kerak emas
+
       // Zombi uchun bosh burish va qo'l silkitish ma'lumotlarini uzatish
       const headYaw   = mob.type === 'zombie' ? (mob.headYaw   ?? 0) : 0;
       const headPitch = mob.type === 'zombie' ? (mob.headPitch ?? 0) : 0;
