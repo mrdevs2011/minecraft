@@ -12,8 +12,9 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 //  GLB teksturasi o'chiriladi → rang kod orqali beriladi.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const GLB_PATH   = 'models/steve.glb';
-const STEVE_SCALE = 1.0;
+const GLB_PATH   = 'models/steve.glb?v=2';
+const STEVE_SCALE = 0.25;   // xom model: balandlik=8, kenglik(qo'llar bilan)=4 birlik
+                              // → 0.25 scale: balandlik=2 blok, kenglik=1 blok
 
 const _loader = new GLTFLoader();
 let _gltfCache   = null;
