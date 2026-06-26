@@ -367,7 +367,11 @@ async function _initClock() {
     const res = await fetch(`${_mrLocalUrl}/mc/clock`);
     if (res.ok) {
       const data = await res.json();
-      _gameSeconds   = data.seconds ?? 0;
+      const savedSeconds = data.seconds ?? 0;
+      const savedAt      = data.savedAt  ?? Date.now();
+      // Server o'chib yongan vaqtni ham hisobga olamiz
+      const offlineElapsed = (Date.now() - savedAt) / 1000;
+      _gameSeconds   = savedSeconds + offlineElapsed;
       _clockLoadedAt = Date.now();
       return;
     }
