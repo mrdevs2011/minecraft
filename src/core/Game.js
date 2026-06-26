@@ -5,6 +5,7 @@ import { InputHandler } from './InputHandler.js';
 import { Raycaster }    from './Raycaster.js';
 import { HUD }          from '../ui/HUD.js';
 import { BLOCK_AIR }    from '../world/Blocks.js';
+import { MobManager }   from '../world/MobManager.js';
 import { fetchAllBlockChanges, pushBlockChange, listenForBlockChanges,
          pushPlayerPosition, removePlayerDoc, listenForPlayers,
          listenForUserProfile, listenForClock, rotateCacheOnExit,
@@ -33,6 +34,7 @@ export class Game {
     this._isGhost = false;    // true when tab is hidden
     this._unsubscribeClock = null;
     this._touchAimScreen = null; // {x,y} — mobil: barmoq turgan ekran nuqtasi (aim/highlight uchun)
+    this._lastAttackTime = 0;    // mob larga zarba berish orasidagi "punch" cooldown uchun
   }
 
   start() {
@@ -42,6 +44,7 @@ export class Game {
     this.input     = new InputHandler(this.canvas);
     this.raycaster = new Raycaster(this.world);
     this.hud       = new HUD(this.player, this.user);
+    this.mobManager = new MobManager(this.world);
     this._lastChunkX = null;   // o'yinchi oxirgi turgan chunk X
     this._lastChunkZ = null;   // o'yinchi oxirgi turgan chunk Z
 
@@ -59,6 +62,9 @@ export class Game {
     const sy = this.world.getSurfaceY(0, 0);
     this.player.x = 0; this.player.y = sy + 2; this.player.z = 0;
     this.player._initInventory();
+
+    // Hayvonlar (qo'y) va zombilarni o'yinchi spawn nuqtasi atrofida joylashtirish
+    this.mobManager.init(this.player.x, this.player.z);
 
     // Firebase dan oxirgi pozitsiya va inventarni yuklash
     if (this.user) {
@@ -82,10 +88,14 @@ export class Game {
 
     this.input.onClick(btn => {
       if (this.paused) return;
-      const hit = this._raycast();
-      if (!hit.hit) return;
-      if (btn === 0) this._breakBlock(hit);
-      else if (btn === 2) this._placeBlock(hit);
+      if (btn === 0) {
+        if (this._tryAttackMob()) return;
+        const hit = this._raycast();
+        if (hit.hit) this._breakBlock(hit);
+      } else if (btn === 2) {
+        const hit = this._raycast();
+        if (hit.hit) this._placeBlock(hit);
+      }
     });
 
     // ── Mobile touch: drag = look (handled in InputHandler), tap = place,
@@ -99,6 +109,7 @@ export class Game {
     });
     this.input.onTouchBreak((x, y) => {
       if (this.paused) return;
+      if (this._tryAttackMobAtScreen(x, y)) return;
       const hit = this._raycastAtScreen(x, y);
       if (hit.hit) this._breakBlock(hit);
     });
@@ -341,6 +352,13 @@ export class Game {
     // ── Fluid simulation tick ─────────────────────────────────────────────
     this.world.tick(dt);
 
+    // ── Mob lar (qo'y, zombi) AI/fizika tiki ────────────────────────────────
+    const healthBefore = this.player.health;
+    this.mobManager.update(dt, this.player);
+    if (this.player.health < healthBefore) {
+      this.hud.flashDamage();
+    }
+
     // ── Push this player's position to Firebase (throttled, ~every 100ms) ─
     // Firebase.js ichida epsilon tekshiruvi bor — hech narsa o'zgarmasa yozilmaydi.
     if (this.user) {
@@ -366,7 +384,7 @@ export class Game {
     const hit = this._touchAimScreen
       ? this._raycastAtScreen(this._touchAimScreen.x, this._touchAimScreen.y)
       : this._raycast();
-    this.renderer.render(this.player, hit, this._moving, this._dt);
+    this.renderer.render(this.player, hit, this._moving, this._dt, this.mobManager.mobs);
     this.hud.update();
   }
 
@@ -385,6 +403,42 @@ export class Game {
   _raycastAtScreen(screenX, screenY) {
     const { ox, oy, oz, dx, dy, dz } = this.renderer.screenPointToRay(screenX, screenY);
     return this.raycaster.cast(ox, oy, oz, dx, dy, dz);
+  }
+
+  // ── Mob larga "musht" hujumi ────────────────────────────────────────────
+  // Crosshair (desktop) yo'nalishi bo'yicha eng yaqin mobni qidiradi va,
+  // agar topilsa (hamda yo'lda blok to'siq bo'lmasa), unga zarba beradi.
+  _tryAttackMob() {
+    const { dx, dy, dz } = Raycaster.directionFromYawPitch(this.player.yaw, this.player.pitch);
+    return this._attackMobAlongRay(
+      this.player.getEyeX(), this.player.getEyeY(), this.player.getEyeZ(), dx, dy, dz
+    );
+  }
+
+  _tryAttackMobAtScreen(screenX, screenY) {
+    const { ox, oy, oz, dx, dy, dz } = this.renderer.screenPointToRay(screenX, screenY);
+    return this._attackMobAlongRay(ox, oy, oz, dx, dy, dz);
+  }
+
+  _attackMobAlongRay(ox, oy, oz, dx, dy, dz) {
+    const mobHit = this.mobManager.raycastMob(ox, oy, oz, dx, dy, dz, 5);
+    if (!mobHit) return false;
+
+    // Agar yo'lda mobdan oldinroq qattiq blok bo'lsa — blok to'sib turadi, urilmaydi
+    const blockHit = this.raycaster.cast(ox, oy, oz, dx, dy, dz);
+    if (blockHit.hit && blockHit.distance < mobHit.distance) return false;
+
+    this._attackMob(mobHit.mob);
+    return true;
+  }
+
+  _attackMob(mob) {
+    const now = performance.now();
+    if (now - this._lastAttackTime < 350) return; // "musht" tezligi cooldown
+    this._lastAttackTime = now;
+
+    const PUNCH_DAMAGE = 2;
+    mob.takeDamage(PUNCH_DAMAGE, this.player.yaw);
   }
 
   _togglePause() {

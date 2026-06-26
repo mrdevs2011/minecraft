@@ -22,8 +22,10 @@ export class Player {
     this.onGround = false;
     this.inWater  = false;
     this._swimWasUp = true; this.maxHealth = 20;
+    this.health    = this.maxHealth; // ❤️ HUD shu qiymatdan boshlanadi
     this.hunger    = 20; this.maxHunger = 20;
     this._hungerTimer = 0;
+    this._hurtCooldown = 0; // zombi zarbasidan keyingi qisqa "immunitet" (soniya)
     this.inventory = new Array(36).fill(null);
     this.hotbarSlot = 0;
     this.width  = 0.6;
@@ -54,6 +56,16 @@ export class Player {
     this._applyGravity(dt);
     this._resolveCollision(dt);
     this._updateHunger(dt);
+    if (this._hurtCooldown > 0) this._hurtCooldown -= dt;
+  }
+
+  // Mob (masalan, zombi) tomonidan zarar yetkazish. Qisqa "immunitet" oynasi
+  // bilan — bir nechta zombi bir vaqtda urganda zarar ortiqcha tez ketmasin.
+  takeDamage(amount) {
+    if (this.health <= 0 || this._hurtCooldown > 0) return;
+    this.health = Math.max(0, this.health - amount);
+    this._hurtCooldown = 0.6;
+    if (this.health <= 0) this.respawn();
   }
 
   _updateHunger(dt) {

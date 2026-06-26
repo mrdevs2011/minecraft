@@ -3,6 +3,8 @@ import { CHUNK_SIZE }    from '../world/Chunk.js';
 import { buildChunkMesh } from './ChunkMesher.js';
 import { createAvatar, SteveAvatar } from '../../avatars/index.js';
 import { buildTextureAtlas } from '../world/TextureAtlas.js';
+import { ZombieAvatar } from '../entities/ZombieAvatar.js';
+import { SheepModel }   from '../entities/SheepModel.js';
 
 const FOV_DEG            = 70;
 const RENDER_DIST_BLOCKS = CHUNK_SIZE * 5;
@@ -270,6 +272,9 @@ export class Renderer {
     // ── Other players ──
     this._otherPlayerModels = new Map();
 
+    // ── Mobs (qo'y, zombi, ...) — entity.id → { model, type } ──
+    this._mobModels = new Map();
+
     // ── View mode ──
     this._viewMode = 'third';
 
@@ -305,12 +310,13 @@ export class Renderer {
     };
   }
 
-  render(player, raycastResult, moving, dt) {
+  render(player, raycastResult, moving, dt, mobs) {
     this._updateSteve(player, moving, dt || 0.016);
     this._syncCamera(player);
     this._updateChunks(player);
     this._updateHighlight(raycastResult);
     this._tickOtherPlayers(dt || 0.016);
+    this._tickMobs(mobs || [], dt || 0.016);
 
     const t = performance.now() * 0.00005;
     this.sunMesh.position.set(
@@ -467,6 +473,31 @@ export class Renderer {
   _updateSteve(player, moving, dt) {
     this.steve.setVisible(this._viewMode === 'third');
     this.steve.update(player.x, player.y, player.z, player.yaw, !!moving, dt);
+  }
+
+  // Game.js dagi MobManager.mobs ro'yxatini THREE modellariga sinxronlaydi:
+  // yangi mob lar uchun model yaratadi, o'lgan/yo'qolgan lar uchun dispose qiladi.
+  _tickMobs(mobs, dt) {
+    const aliveIds = new Set();
+
+    for (const mob of mobs) {
+      aliveIds.add(mob.id);
+      let entry = this._mobModels.get(mob.id);
+      if (!entry) {
+        const model = mob.type === 'zombie' ? new ZombieAvatar(this.scene) : new SheepModel(this.scene);
+        entry = { model };
+        this._mobModels.set(mob.id, entry);
+      }
+      entry.model.update(mob.x, mob.y, mob.z, mob.yaw, !!mob.moving, dt);
+      entry.model.setHurt?.(mob._hurtFlash > 0);
+    }
+
+    for (const [id, entry] of this._mobModels) {
+      if (!aliveIds.has(id)) {
+        entry.model.dispose();
+        this._mobModels.delete(id);
+      }
+    }
   }
 
   _syncCamera(player) {
