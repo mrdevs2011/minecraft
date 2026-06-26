@@ -3,14 +3,21 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  ZombieAvatar — GLB model + bosh burish + qo'l silkitish
+//  ZombieAvatar — zombie.glb modeli, Steve kabi qo'l/oyoq animatsiyasi
+//
+//  zombie.glb node nomlari:
+//    z_head   → bosh
+//    z_body   → tana
+//    z_arm_l  → chap qo'l
+//    z_arm_r  → o'ng qo'l
+//    z_leg_l  → chap oyoq
+//    z_leg_r  → o'ng oyoq
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ZOMBIE_SCALE = 0.25;   // Steve bilan bir xil kattalik
+const ZOMBIE_SCALE = 0.011;
 const GLB_PATH     = 'models/zombie.glb';
 
-const loader = new GLTFLoader();
-
+const _loader = new GLTFLoader();
 let _gltfCache   = null;
 let _loadPromise = null;
 
@@ -18,8 +25,7 @@ function loadGLTF() {
   if (_gltfCache)   return Promise.resolve(_gltfCache);
   if (_loadPromise) return _loadPromise;
   _loadPromise = new Promise((resolve, reject) => {
-    loader.load(
-      GLB_PATH,
+    _loader.load(GLB_PATH,
       gltf => { _gltfCache = gltf; resolve(gltf); },
       undefined,
       err  => { console.error('[ZombieAvatar] GLB yuklanmadi:', err); reject(err); }
@@ -32,15 +38,18 @@ export class ZombieAvatar {
   constructor(scene) {
     this.scene      = scene;
     this._ready     = false;
-    this._mixer     = null;
-    this._actions   = {};
+    this._time      = 0;
     this._moving    = false;
     this._hurtFlash = false;
 
-    // Bosh va qo'l uchun referenslar
-    this._headBone  = null;
-    this._armLBone  = null;
-    this._armRBone  = null;
+    // Model qismlari (zombie.glb nodes)
+    this._head  = null;
+    this._body  = null;
+    this._armL  = null;
+    this._armR  = null;
+    this._legL  = null;
+    this._legR  = null;
+    this._origRot = null;
 
     this.root = new THREE.Group();
     scene.add(this.root);
@@ -52,125 +61,121 @@ export class ZombieAvatar {
     try {
       const gltf = await loadGLTF();
 
+      // SkeletonUtils.clone — skinned mesh uchun to'g'ri clone
       this._model = SkeletonUtils.clone(gltf.scene);
       this._model.scale.setScalar(ZOMBIE_SCALE);
 
+      // Oyoqlar yerda tursin
       const box = new THREE.Box3().setFromObject(this._model);
-      this._model.position.y = -box.min.y * ZOMBIE_SCALE;
+      this._model.position.y = -box.min.y;
 
       this.root.add(this._model);
 
-      // Bosh va qo'l suyaklarini topamiz
+      // Node larni topamiz
       this._model.traverse(obj => {
-        const n = obj.name.toLowerCase();
-        if (!this._headBone && (n.includes('head') || n.includes('bosh'))) {
-          this._headBone = obj;
-        }
-        if (!this._armLBone && (n.includes('arm') && (n.includes('l') || n.includes('left')))) {
-          this._armLBone = obj;
-        }
-        if (!this._armRBone && (n.includes('arm') && (n.includes('r') || n.includes('right')))) {
-          this._armRBone = obj;
+        switch (obj.name) {
+          case 'z_head':  this._head  = obj; break;
+          case 'z_body':  this._body  = obj; break;
+          case 'z_arm_l': this._armL  = obj; break;
+          case 'z_arm_r': this._armR  = obj; break;
+          case 'z_leg_l': this._legL  = obj; break;
+          case 'z_leg_r': this._legR  = obj; break;
         }
       });
 
-      // AnimationMixer
-      this._mixer = new THREE.AnimationMixer(this._model);
+      // Asl rotatsiyalarni (GLB T-pose) saqlaymiz
+      this._origRot = {
+        armL:  this._armL ? this._armL.rotation.clone() : new THREE.Euler(),
+        armR:  this._armR ? this._armR.rotation.clone() : new THREE.Euler(),
+        legL:  this._legL ? this._legL.rotation.clone() : new THREE.Euler(),
+        legR:  this._legR ? this._legR.rotation.clone() : new THREE.Euler(),
+        head:  this._head ? this._head.rotation.clone() : new THREE.Euler(),
+        headY: this._head ? this._head.position.y       : 0,
+      };
 
-      const walkClip = THREE.AnimationClip.findByName(gltf.animations, 'z_armature|walk');
-      const idleClip = THREE.AnimationClip.findByName(gltf.animations, 'z_armature|t-pose');
+      // GLB animatsiyalarini O'CHIRAMIZ — kod orqali boshqaramiz
+      // (mixer ishlatmaymiz)
 
-      if (walkClip) {
-        this._actions.walk = this._mixer.clipAction(walkClip);
-        this._actions.walk.setLoop(THREE.LoopRepeat, Infinity);
-      }
-      if (idleClip) {
-        this._actions.idle = this._mixer.clipAction(idleClip);
-        this._actions.idle.setLoop(THREE.LoopRepeat, Infinity);
-      }
-
-      this._playAction('idle');
       this._ready = true;
 
-      if (this._hurtFlash) this._applyHurt(true);
-
     } catch (e) {
-      console.warn('[ZombieAvatar] Yuklanishda xatolik, fallback ishlatiladi');
+      console.warn('[ZombieAvatar] GLB yuklanmadi, fallback:', e);
       this._buildFallback();
       this._ready = true;
     }
   }
 
-  _playAction(name) {
-    const next = this._actions[name];
-    if (!next || this._currentAction === name) return;
-    this._currentAction = name;
-
-    for (const [key, action] of Object.entries(this._actions)) {
-      if (key !== name && action.isRunning()) action.fadeOut(0.2);
-    }
-    next.reset().fadeIn(0.2).play();
-  }
-
-  // ─── Update ───────────────────────────────────────────────────────────────
-  // headYaw: bosh yon burish (±70°), headPitch: yuqori-pastga, attackAnim: qo'l silkitish
+  // ── UPDATE — har frameda Renderer tomonidan chaqiriladi ───────────────────
+  // headYaw, headPitch: bosh burish (radians)
+  // attackAnim: 0..1 — zarba silkitish sikli
   update(x, y, z, yaw, moving, dt, headYaw = 0, headPitch = 0, attackAnim = 0) {
     this.root.position.set(x, y, z);
     this.root.rotation.y = yaw + Math.PI;
 
     if (!this._ready) return;
 
-    // Walk/Idle animatsiya
-    if (moving !== this._moving) {
-      this._moving = moving;
-      this._playAction(moving ? 'walk' : 'idle');
+    // ── Yurish vaqti ──────────────────────────────────────────────────────
+    if (moving) {
+      this._time += dt * 9;
+    } else {
+      // To'xtatganda animatsiya nolga yaqinlashadi
+      if (Math.abs(Math.sin(this._time)) > 0.02) this._time += dt * 6;
     }
 
-    if (this._mixer) this._mixer.update(dt);
+    const swing = moving ? Math.sin(this._time) * 0.65 : 0;
 
-    // ── Bosh burish ─────────────────────────────────────────────────────────
-    if (this._headBone) {
-      // Sekin-asta silliqlash (lerp)
-      this._headBone.rotation.y = THREE.MathUtils.lerp(
-        this._headBone.rotation.y, headYaw, 0.15
-      );
-      this._headBone.rotation.x = THREE.MathUtils.lerp(
-        this._headBone.rotation.x, headPitch, 0.15
-      );
+    // ── Oyoqlar tebranishi ────────────────────────────────────────────────
+    if (this._legL) this._legL.rotation.x = (this._origRot.legL.x) + swing;
+    if (this._legR) this._legR.rotation.x = (this._origRot.legR.x) - swing;
+
+    // ── Qo'llar ───────────────────────────────────────────────────────────
+    if (attackAnim > 0) {
+      // Zarba: qo'llar oldinga-orqaga tez silkiydi
+      const hit = Math.sin(attackAnim * Math.PI * 2) * 1.1;
+      if (this._armL) this._armL.rotation.x = this._origRot.armL.x - Math.PI * 0.5 + hit;
+      if (this._armR) this._armR.rotation.x = this._origRot.armR.x - Math.PI * 0.5 - hit * 0.5;
+    } else {
+      // Oddiy yurish — teskari oyoqlar bilan
+      if (this._armL) this._armL.rotation.x = this._origRot.armL.x - swing;
+      if (this._armR) this._armR.rotation.x = this._origRot.armR.x + swing;
     }
 
-    // ── Qo'l silkitish (zarba animatsiyasi) ─────────────────────────────────
-    if (this._armLBone && attackAnim > 0) {
-      // Oldinga-orqaga tebranish
-      const swing = Math.sin(attackAnim * Math.PI * 2) * 0.9;
-      this._armLBone.rotation.x = -Math.PI * 0.4 + swing;
-      if (this._armRBone) {
-        this._armRBone.rotation.x = -Math.PI * 0.4 - swing * 0.5;
-      }
-    } else if (this._armLBone && attackAnim === 0) {
-      // Animatsiya tugaganda qo'llarni asl holatga qaytarish
-      this._armLBone.rotation.x = THREE.MathUtils.lerp(
-        this._armLBone.rotation.x, -Math.PI * 0.4, 0.2
+    // Qo'llar biroz tashqariga
+    if (this._armL) this._armL.rotation.z = moving ?  0.05 : 0;
+    if (this._armR) this._armR.rotation.z = moving ? -0.05 : 0;
+
+    // ── Bosh burish — player tomonga ──────────────────────────────────────
+    if (this._head) {
+      this._head.rotation.y = THREE.MathUtils.lerp(
+        this._head.rotation.y, this._origRot.head.y + headYaw, 0.12
       );
-      if (this._armRBone) {
-        this._armRBone.rotation.x = THREE.MathUtils.lerp(
-          this._armRBone.rotation.x, -Math.PI * 0.4, 0.2
-        );
-      }
+      this._head.rotation.x = THREE.MathUtils.lerp(
+        this._head.rotation.x, this._origRot.head.x + headPitch, 0.12
+      );
+
+      // Bosh bob (yuqori-pastga sakrash)
+      const bob = moving ? Math.abs(Math.sin(this._time * 2)) * 0.018 : 0;
+      this._head.position.y = this._origRot.headY + bob;
     }
+
+    // Tana biroz oldinga egiladi
+    if (this._body) this._body.rotation.x = moving ? 0.05 : 0;
   }
 
+  // ── Hurt flash ────────────────────────────────────────────────────────────
   setHurt(isHurt) {
     if (this._hurtFlash === isHurt) return;
     this._hurtFlash = isHurt;
-    if (this._ready) this._applyHurt(isHurt);
-  }
+    if (!this._ready) return;
 
-  _applyHurt(on) {
     this.root.traverse(obj => {
       if (!obj.isMesh || !obj.material) return;
-      if (on) {
-        if (!obj._origEmissive) obj._origEmissive = obj.material.emissive?.clone();
+      if (isHurt) {
+        if (!obj._origEmissive) {
+          obj._origEmissive = obj.material.emissive
+            ? obj.material.emissive.clone()
+            : new THREE.Color(0);
+        }
         obj.material.emissive?.set(0x661100);
       } else {
         if (obj._origEmissive) obj.material.emissive?.copy(obj._origEmissive);
@@ -180,7 +185,9 @@ export class ZombieAvatar {
     });
   }
 
-  // ─── Fallback model ───────────────────────────────────────────────────────
+  setVisible(v) { this.root.visible = v; }
+
+  // ── Fallback ───────────────────────────────────────────────────────────────
   _buildFallback() {
     const mat  = c => new THREE.MeshLambertMaterial({ color: c });
     const cube = (w, h, d, c, px, py, pz) => {
@@ -189,63 +196,41 @@ export class ZombieAvatar {
       return m;
     };
 
+    // Bosh
+    this._head = new THREE.Group();
+    this._head.position.set(0, 1.55, 0);
+    this._head.add(new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 0.5, 0.5), mat(0x4a7a3a)
+    ));
+    this.root.add(this._head);
+
     // Tana
-    this.root.add(cube(0.46, 0.60, 0.26, 0x1a3a6a, 0, 1.00, 0));
+    this._body = cube(0.46, 0.60, 0.26, 0x2a5a6a, 0, 1.00, 0);
+    this.root.add(this._body);
 
-    // Bosh — headGroup ichida (burilishi uchun)
-    this._headGroup = new THREE.Group();
-    this._headGroup.position.set(0, 1.55, 0);
-    const headMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(0.50, 0.50, 0.50),
-      mat(0x5a7a4a)
-    );
-    this._headGroup.add(headMesh);
-    this.root.add(this._headGroup);
-    this._headBone = this._headGroup;
-
-    // Qo'llar — Group ichida (silkitish uchun)
-    this._armLGroup = new THREE.Group();
-    this._armLGroup.position.set(-0.335, 1.00, 0);
-    const lArmMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(0.21, 0.56, 0.21),
-      mat(0x5a7a4a)
-    );
-    lArmMesh.position.set(0, -0.28, 0);
-    this._armLGroup.rotation.x = -Math.PI * 0.45;
-    this._armLGroup.add(lArmMesh);
-    this.root.add(this._armLGroup);
-    this._armLBone = this._armLGroup;
-
-    this._armRGroup = new THREE.Group();
-    this._armRGroup.position.set(0.335, 1.00, 0);
-    const rArmMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(0.21, 0.56, 0.21),
-      mat(0x5a7a4a)
-    );
-    rArmMesh.position.set(0, -0.28, 0);
-    this._armRGroup.rotation.x = -Math.PI * 0.45;
-    this._armRGroup.add(rArmMesh);
-    this.root.add(this._armRGroup);
-    this._armRBone = this._armRGroup;
+    // Qo'llar
+    this._armR = cube(0.22, 0.58, 0.22, 0x2a5a6a, -0.34, 1.00, 0);
+    this._armL = cube(0.22, 0.58, 0.22, 0x2a5a6a,  0.34, 1.00, 0);
+    this.root.add(this._armR, this._armL);
 
     // Oyoqlar
-    this.root.add(cube(0.22, 0.58, 0.22, 0x1c2e50, -0.115, 0.40, 0));
-    this.root.add(cube(0.22, 0.58, 0.22, 0x1c2e50,  0.115, 0.40, 0));
-  }
+    this._legR = cube(0.22, 0.58, 0.22, 0x1a2a4a, -0.115, 0.40, 0);
+    this._legL = cube(0.22, 0.58, 0.22, 0x1a2a4a,  0.115, 0.40, 0);
+    this.root.add(this._legR, this._legL);
 
-  setVisible(v) { this.root.visible = v; }
+    this._origRot = {
+      armL: new THREE.Euler(), armR: new THREE.Euler(),
+      legL: new THREE.Euler(), legR: new THREE.Euler(),
+      head: new THREE.Euler(), headY: 1.55,
+    };
+  }
 
   dispose() {
     this.scene.remove(this.root);
-    if (this._mixer) this._mixer.stopAllAction();
     this.root.traverse(obj => {
       if (obj.isMesh) {
         obj.geometry?.dispose();
-        if (Array.isArray(obj.material)) {
-          obj.material.forEach(m => m.dispose());
-        } else {
-          obj.material?.dispose();
-        }
+        obj.material?.dispose();
       }
     });
   }
