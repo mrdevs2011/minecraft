@@ -1,29 +1,23 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  MobManager — Qo'y (sheep) va Zombi (zombie) moblari boshqaruvchisi
-//
-//  Game.js ga import qilinadi:
-//    import { MobManager } from '../world/MobManager.js';
-//
-//  Renderer.js mobManager.mobs ro'yxatini oladi va ZombieAvatar / SheepModel
-//  orqali render qiladi.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MAX_SHEEP   = 6;   // maksimal qo'y soni
-const MAX_ZOMBIES = 4;   // maksimal zombi soni
+const MAX_SHEEP   = 6;
+const MAX_ZOMBIES = 4;
 
-const SHEEP_SPEED   = 2.2;   // blok/sekund
-const ZOMBIE_SPEED  = 2.0;   // blok/sekund (zombi sekinroq)
+const SHEEP_SPEED   = 2.2;
+const ZOMBIE_SPEED  = 2.8;   // biroz tezroq — qo'rqinchli
 
-const SHEEP_ROAM_RADIUS   = 18; // spawn markazidan uzoqlaşa oladi
+const SHEEP_ROAM_RADIUS   = 18;
 const ZOMBIE_CHASE_DIST   = 22; // zombi shu masofada player ni ko'radi
-const ZOMBIE_ATTACK_DIST  = 2.2; // shu masofada zarba beradi (3D masofa)
-const ZOMBIE_ATTACK_DMG   = 1;   // bir zarba ziyoni (canlardan)
-const ZOMBIE_ATTACK_CD    = 1.2; // zarba orasidagi cooldown (sekund)
+const ZOMBIE_ATTACK_DIST  = 1.5; // shu masofada zarba beradi
+const ZOMBIE_ATTACK_DMG   = 2;   // bir zarba ziyoni
+const ZOMBIE_ATTACK_CD    = 1.0; // zarba orasidagi cooldown (sekund)
 
 const GRAVITY     = -18;
 const JUMP_VEL    =  7;
 
-const HURT_FLASH_TIME = 0.25; // sekund
+const HURT_FLASH_TIME = 0.25;
 const SHEEP_HP        = 8;
 const ZOMBIE_HP       = 20;
 
@@ -35,29 +29,32 @@ let _nextId = 1;
 class Mob {
   constructor(type, x, y, z) {
     this.id     = _nextId++;
-    this.type   = type;      // 'sheep' | 'zombie'
+    this.type   = type;
     this.x      = x;
     this.y      = y;
     this.z      = z;
     this.yaw    = Math.random() * Math.PI * 2;
-    this.vy     = 0;         // vertikal tezlik
+    this.vy     = 0;
     this.moving = false;
     this.hp     = type === 'zombie' ? ZOMBIE_HP : SHEEP_HP;
     this.dead   = false;
 
-    // AI holat mashina
-    this._state      = 'idle';    // 'idle' | 'roam' | 'chase' | 'attack'
+    // Bosh burish (player tomonga)
+    this.headYaw   = 0;  // nisbiy yaw (tanaga nisbatan)
+    this.headPitch = 0;  // boshning yuqori-pastga burishi
+    this.isChasing = false; // player ni ko'ryaptimi
+
+    // Qo'l silkitish animatsiyasi
+    this.attackAnim = 0; // 0..1 sikl
+
+    this._state      = 'idle';
     this._stateTimer = 0;
     this._targetX    = x;
     this._targetZ    = z;
-    this._spawnX     = x;         // spawn markazi (qo'y uchun)
+    this._spawnX     = x;
     this._spawnZ     = z;
     this._attackCooldown = 0;
-
-    // Hurt flash uchun timer
     this._hurtFlash = 0;
-
-    // Knockback
     this._kbX = 0;
     this._kbZ = 0;
   }
@@ -74,13 +71,10 @@ export class MobManager {
     this.mobs  = [];
   }
 
-  // O'yinchi boshlanish nuqtasi atrofida moblarni joylashtirish
   init(playerX, playerZ) {
-    // Qo'ylar
     for (let i = 0; i < MAX_SHEEP; i++) {
       this._spawnMob('sheep', playerX, playerZ);
     }
-    // Zombilar — biroz uzoqroqda spawn bo'ladi
     for (let i = 0; i < MAX_ZOMBIES; i++) {
       this._spawnMob('zombie', playerX, playerZ, 12, 24);
     }
@@ -94,62 +88,44 @@ export class MobManager {
       const wz    = Math.round(cz + Math.sin(angle) * r);
       const wy    = this.world.getSurfaceY(wx, wz);
 
-      // Suv yoki boshqa noqulay joyga spawn bo'lmasin
       const blockBelow = this.world.getBlock(wx, wy - 1, wz);
-      if (blockBelow === 7 /* BLOCK_WATER */ && type !== 'zombie') continue;
+      if (blockBelow === 7) continue; // suv
 
-      // Zombilar osmonda uchib yuradi — 15-25 blok balandlikda spawn bo'ladi
-      const spawnY = type === 'zombie' ? wy + 15 + Math.random() * 10 : wy;
-
-      const mob = new Mob(type, wx, spawnY, wz);
+      const mob = new Mob(type, wx, wy, wz);
       this.mobs.push(mob);
       return mob;
     }
     return null;
   }
 
-  // ── Asosiy update (Game.js dan har frameda chaqiriladi) ──────────────────
   update(dt, player) {
     for (const mob of this.mobs) {
       if (mob.dead) continue;
       this._updateMob(mob, dt, player);
     }
-    // O'lgan moblarni ro'yxatdan o'chirish
     this.mobs = this.mobs.filter(m => !m.dead);
   }
 
   _updateMob(mob, dt, player) {
-    // ── Hurt timer ──
     if (mob._hurtFlash > 0) {
       mob._hurtFlash -= dt;
       if (mob._hurtFlash < 0) mob._hurtFlash = 0;
     }
-
-    // ── Attack cooldown ──
     if (mob._attackCooldown > 0) mob._attackCooldown -= dt;
 
-    // ── AI ──
     if (mob.type === 'sheep') {
       this._updateSheep(mob, dt);
     } else {
       this._updateZombie(mob, dt, player);
     }
 
-    // ── Fizika (gravity + collision) ── faqat qo'ylar uchun
-    if (mob.type === 'sheep') {
-      this._applyPhysics(mob, dt);
-    } else {
-      // Zombilar osmonda uchadi — gravity yo'q, lekin void himoyasi bor
-      if (mob.y < -10) mob.dead = true;
-    }
+    // Fizika — barcha moblar uchun (yerda yuradi)
+    this._applyPhysics(mob, dt);
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  //  Qo'y AI — erkin sayr qiladi, player dan qochadi
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─── Qo'y AI ─────────────────────────────────────────────────────────────
   _updateSheep(mob, dt) {
     mob._stateTimer -= dt;
-
     const dx = mob.x - mob._spawnX;
     const dz = mob.z - mob._spawnZ;
     const distFromSpawn = Math.sqrt(dx * dx + dz * dz);
@@ -157,9 +133,7 @@ export class MobManager {
     if (mob._state === 'idle') {
       mob.moving = false;
       if (mob._stateTimer <= 0) {
-        // Yangi maqsad tanlash
         if (distFromSpawn > SHEEP_ROAM_RADIUS) {
-          // Spawn ga qaytish
           mob._targetX = mob._spawnX + (Math.random() - 0.5) * 4;
           mob._targetZ = mob._spawnZ + (Math.random() - 0.5) * 4;
         } else {
@@ -181,65 +155,99 @@ export class MobManager {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  //  Zombi AI — osmonda uchib playerni ta'qib etadi va zarba beradi
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─── Zombi AI ─────────────────────────────────────────────────────────────
   _updateZombie(mob, dt, player) {
     const dx   = player.x - mob.x;
-    const dy   = (player.y + 1.0) - mob.y;  // player ko'kragiga nishon
     const dz   = player.z - mob.z;
-    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const dist2D = Math.sqrt(dx * dx + dz * dz);
 
-    // Har doim playerni ko'radi — ta'qib qiladi (osmon zombilari hamma joyni ko'radi)
-    mob._state  = 'chase';
+    // Player ko'zga ko'rinadimi
+    const sees = dist2D < ZOMBIE_CHASE_DIST;
+    mob.isChasing = sees;
 
-    if (dist < ZOMBIE_ATTACK_DIST) {
-      // Zarba masofasida
-      mob.moving = false;
-      mob._state = 'attack';
-      if (mob._attackCooldown <= 0) {
-        mob._attackCooldown = ZOMBIE_ATTACK_CD;
-        player.takeDamage(ZOMBIE_ATTACK_DMG);
+    if (sees) {
+      mob._state   = 'chase';
+      mob._targetX = player.x;
+      mob._targetZ = player.z;
+
+      // ── Bosh burish: player tomonga qarash ──────────────────────────────
+      // headYaw: tana yaw ga nisbatan farq (±PI/2 oralig'ida)
+      const toPlayerAngle = Math.atan2(-dx, -dz);
+      let rawDiff = toPlayerAngle - mob.yaw;
+      // Normalize to [-PI, PI]
+      while (rawDiff >  Math.PI) rawDiff -= Math.PI * 2;
+      while (rawDiff < -Math.PI) rawDiff += Math.PI * 2;
+      // Boshni max ±70° burish
+      const maxHeadYaw = Math.PI * 0.39;
+      mob.headYaw = Math.max(-maxHeadYaw, Math.min(maxHeadYaw, rawDiff));
+
+      // headPitch: player ga yuqoriga/pastga qarash
+      const playerEyeY = player.y + 1.62;
+      const zombieEyeY = mob.y + 1.6;
+      const dy3d       = playerEyeY - zombieEyeY;
+      mob.headPitch = Math.max(-0.4, Math.min(0.4, Math.atan2(dy3d, dist2D + 0.01)));
+
+      // ── Zarba masofasida ─────────────────────────────────────────────────
+      if (dist2D < ZOMBIE_ATTACK_DIST) {
+        mob.moving = false;
+        mob._state = 'attack';
+        // Qo'l silkitish animatsiyasi
+        mob.attackAnim = (mob.attackAnim + dt * 4.0) % 1.0;
+
+        if (mob._attackCooldown <= 0) {
+          mob._attackCooldown = ZOMBIE_ATTACK_CD;
+          player.takeDamage(ZOMBIE_ATTACK_DMG);
+          // O'yinchi o'lganda respawn bo'ladi (Player.js da bor)
+        }
+      } else {
+        mob.moving = true;
+        mob.attackAnim = 0;
+        this._moveToward(mob, player.x, player.z, ZOMBIE_SPEED, dt);
       }
+
     } else {
-      // Playerni 3D da ta'qib etish — X, Y, Z bo'yicha birga harakat
-      mob.moving = true;
+      // Player ko'rinmaydi — bosh to'g'rilaydi, bekor aylanadi
+      mob.isChasing  = false;
+      mob.headYaw    = 0;
+      mob.headPitch  = 0;
+      mob.attackAnim = 0;
+      mob._stateTimer -= dt;
 
-      const nx = dx / dist;
-      const ny = dy / dist;
-      const nz = dz / dist;
-
-      mob.yaw = Math.atan2(-nx, -nz);
-
-      // Knockback pasayishi
-      const kbDecay = Math.exp(-8 * dt);
-      mob._kbX *= kbDecay;
-      mob._kbZ *= kbDecay;
-
-      // 3D harakat — X, Y, Z
-      mob.x += (nx * ZOMBIE_SPEED + mob._kbX) * dt;
-      mob.y += ny * ZOMBIE_SPEED * dt;
-      mob.z += (nz * ZOMBIE_SPEED + mob._kbZ) * dt;
+      if (mob._state === 'idle' || mob._state === 'chase') {
+        mob._state      = 'idle';
+        mob._stateTimer = 2 + Math.random() * 3;
+        mob.moving      = false;
+      }
+      if (mob._stateTimer <= 0) {
+        const angle  = Math.random() * Math.PI * 2;
+        mob._targetX = mob.x + Math.cos(angle) * (3 + Math.random() * 5);
+        mob._targetZ = mob.z + Math.sin(angle) * (3 + Math.random() * 5);
+        mob._state      = 'roam';
+        mob._stateTimer = 3 + Math.random() * 4;
+      } else if (mob._state === 'roam') {
+        mob.moving = true;
+        const moved = this._moveToward(mob, mob._targetX, mob._targetZ, ZOMBIE_SPEED * 0.55, dt);
+        if (!moved || mob._stateTimer <= 0) {
+          mob._state      = 'idle';
+          mob._stateTimer = 2 + Math.random() * 3;
+          mob.moving      = false;
+        }
+      }
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  //  Maqsadga tomon harakat
-  //  Qaytadi: true — hali maqsadga yetib bormagan, false — yetdi/blok bor
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─── Maqsadga harakat ─────────────────────────────────────────────────────
   _moveToward(mob, tx, tz, speed, dt) {
     const dx   = tx - mob.x;
     const dz   = tz - mob.z;
     const dist = Math.sqrt(dx * dx + dz * dz);
-
-    if (dist < 0.3) return false; // maqsadga yetib bording
+    if (dist < 0.3) return false;
 
     const nx = dx / dist;
     const nz = dz / dist;
 
-    mob.yaw = Math.atan2(-nx, -nz); // mob yuzini yo'nalish tomon burishish
+    mob.yaw = Math.atan2(-nx, -nz);
 
-    // Knockback qo'shish
     const kbDecay = Math.exp(-8 * dt);
     mob._kbX *= kbDecay;
     mob._kbZ *= kbDecay;
@@ -247,9 +255,8 @@ export class MobManager {
     const newX = mob.x + (nx * speed + mob._kbX) * dt;
     const newZ = mob.z + (nz * speed + mob._kbZ) * dt;
 
-    // X va Z alohida tekshirish (sliding collision)
-    const mobH = 1.8; // mob balandligi
-    const mobR = 0.3; // mob radiusi
+    const mobH = 1.8;
+    const mobR = 0.3;
 
     const canX = !this._isSolid(newX, mob.y, mob.z, mobR, mobH);
     const canZ = !this._isSolid(mob.x, mob.y, newZ, mobR, mobH);
@@ -257,10 +264,8 @@ export class MobManager {
     if (canX) mob.x = newX;
     if (canZ) mob.z = newZ;
 
-    // Oldida baland blok bo'lsa — sakrash
     if (!canX || !canZ) {
       if (mob._onGround) {
-        // Blok bor oldinda, sakrash
         const frontX = mob.x + nx * 0.6;
         const frontZ = mob.z + nz * 0.6;
         const frontSolid = this._isSolid(frontX, mob.y + 0.1, frontZ, mobR, 1.0);
@@ -268,45 +273,31 @@ export class MobManager {
       }
       return false;
     }
-
     return true;
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  //  Fizika — tortishish kuchi va yerga tushish
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─── Fizika ───────────────────────────────────────────────────────────────
   _applyPhysics(mob, dt) {
-    // Gravity
     mob.vy += GRAVITY * dt;
     const newY = mob.y + mob.vy * dt;
 
-    // Yer tekshiruvi
     const mobR = 0.3;
     const solidBelow = this._isSolid(mob.x, newY - 0.05, mob.z, mobR, 0.1);
 
     if (solidBelow && mob.vy <= 0) {
-      // Yerga tushdi
       mob._onGround = true;
       mob.vy = 0;
-      // Yer yuzasiga joylash
-      const surfY = this.world.getSurfaceY(
-        Math.round(mob.x), Math.round(mob.z)
-      );
+      const surfY = this.world.getSurfaceY(Math.round(mob.x), Math.round(mob.z));
       mob.y = surfY;
     } else {
       mob._onGround = false;
       mob.y = newY;
     }
 
-    // Yerdan pastga tushmaslik (void himoyasi)
-    if (mob.y < -10) {
-      mob.dead = true;
-    }
+    if (mob.y < -10) mob.dead = true;
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  //  Qattiq blok tekshiruvi (AABB simplified — radius + height)
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─── Blok tekshiruvi ──────────────────────────────────────────────────────
   _isSolid(x, y, z, radius, height) {
     const x0 = Math.floor(x - radius);
     const x1 = Math.floor(x + radius);
@@ -325,9 +316,7 @@ export class MobManager {
     return false;
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  //  Raycast — mobga "musht" hujumi uchun (Game.js dan chaqiriladi)
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─── Raycast (musht zarba) ────────────────────────────────────────────────
   raycastMob(ox, oy, oz, dx, dy, dz, maxDist) {
     let closest     = null;
     let closestDist = maxDist;
@@ -335,21 +324,17 @@ export class MobManager {
     for (const mob of this.mobs) {
       if (mob.dead) continue;
 
-      // Mob markaziga vektor
       const cx = mob.x - ox;
-      const cy = mob.y + 0.9 - oy; // mob markazi
+      const cy = mob.y + 0.9 - oy;
       const cz = mob.z - oz;
 
-      // Nurga proyeksiya
       const t = cx * dx + cy * dy + cz * dz;
       if (t < 0 || t > maxDist) continue;
 
-      // Nurdan eng yaqin nuqta
       const px = ox + dx * t - mob.x;
       const py = oy + dy * t - (mob.y + 0.9);
       const pz = oz + dz * t - mob.z;
 
-      // Mob AABB: ~0.5 × 1.8 × 0.5
       if (Math.abs(px) < 0.5 && Math.abs(py) < 0.9 && Math.abs(pz) < 0.5) {
         if (t < closestDist) {
           closestDist = t;
@@ -357,24 +342,15 @@ export class MobManager {
         }
       }
     }
-
     return closest;
   }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  //  Zarba olish (Game.js dan mob.takeDamage() orqali chaqiriladi)
-  // ─────────────────────────────────────────────────────────────────────────
-  // (Mob classda qo'shamiz — MobManager da ham wrapper kerak emas,
-  //  lekin qulaylik uchun shu yerda ham yozib qo'yamiz.)
 }
 
-// Mob classga takeDamage metodini qo'shamiz (MobManager tashqarisida ham ishlatiladi)
 Mob.prototype.takeDamage = function (dmg, fromYaw) {
   if (this.dead) return;
   this.hp -= dmg;
   this._hurtFlash = HURT_FLASH_TIME;
 
-  // Knockback — zarbadan nariroq uchib ketadi
   if (fromYaw !== undefined) {
     const kb = 4.5;
     this._kbX = -Math.sin(fromYaw) * kb;

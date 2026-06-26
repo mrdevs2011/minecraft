@@ -488,7 +488,11 @@ export class Renderer {
         entry = { model };
         this._mobModels.set(mob.id, entry);
       }
-      entry.model.update(mob.x, mob.y, mob.z, mob.yaw, !!mob.moving, dt);
+      // Zombi uchun bosh burish va qo'l silkitish ma'lumotlarini uzatish
+      const headYaw   = mob.type === 'zombie' ? (mob.headYaw   ?? 0) : 0;
+      const headPitch = mob.type === 'zombie' ? (mob.headPitch ?? 0) : 0;
+      const attackAnim= mob.type === 'zombie' ? (mob.attackAnim?? 0) : 0;
+      entry.model.update(mob.x, mob.y, mob.z, mob.yaw, !!mob.moving, dt, headYaw, headPitch, attackAnim);
       entry.model.setHurt?.(mob._hurtFlash > 0);
     }
 
