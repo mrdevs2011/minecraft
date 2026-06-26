@@ -228,21 +228,100 @@ export class HUD {
 
   _buildClock() {
     if (document.getElementById('game-clock')) return;
+
+    // ── Asosiy soat elementi (har doim ko'rinadi) ──
     const clock = document.createElement('div');
     clock.id = 'game-clock';
     clock.style.cssText = [
       'position:fixed', 'top:12px', 'right:16px',
       'color:#fff', 'font-size:15px', 'font-family:monospace', 'font-weight:bold',
       'text-shadow:0 0 4px #000, 0 1px 2px #000',
-      'background:rgba(0,0,0,0.35)', 'padding:3px 9px',
-      'border-radius:6px', 'letter-spacing:2px',
-      'z-index:9999', 'pointer-events:none', 'user-select:none',
+      'background:rgba(0,0,0,0.38)', 'padding:4px 11px',
+      'border-radius:8px', 'letter-spacing:1px',
+      'z-index:9999', 'cursor:pointer', 'user-select:none',
+      'transition:background 0.15s',
     ].join(';');
     clock.textContent = '00:00';
+
+    // ── Tooltip panel (hover da ko'rinadi) ──
+    const tip = document.createElement('div');
+    tip.id = 'game-clock-tip';
+    tip.style.cssText = [
+      'position:fixed', 'top:46px', 'right:16px',
+      'color:#fff', 'font-size:13px', 'font-family:monospace',
+      'background:rgba(0,0,0,0.72)', 'padding:8px 14px',
+      'border-radius:8px', 'line-height:1.7',
+      'z-index:9998', 'pointer-events:none', 'user-select:none',
+      'opacity:0', 'transform:translateY(-4px)',
+      'transition:opacity 0.18s ease, transform 0.18s ease',
+      'backdrop-filter:blur(2px)', 'border:1px solid rgba(255,255,255,0.12)',
+      'min-width:170px',
+    ].join(';');
+    tip.innerHTML = '—';
+
+    clock.addEventListener('mouseenter', () => {
+      clock.style.background = 'rgba(0,0,0,0.58)';
+      tip.style.opacity = '1';
+      tip.style.transform = 'translateY(0)';
+    });
+    clock.addEventListener('mouseleave', () => {
+      clock.style.background = 'rgba(0,0,0,0.38)';
+      tip.style.opacity = '0';
+      tip.style.transform = 'translateY(-4px)';
+    });
+
     document.body.appendChild(clock);
+    document.body.appendChild(tip);
   }
 
-  _buildDamageOverlay() {
+  updateClock(clockData) {
+    if (clockData.season) this._season = clockData.season;
+    const el  = document.getElementById('game-clock');
+    const tip = document.getElementById('game-clock-tip');
+    if (!el) return;
+
+    const hh = String(clockData.hours).padStart(2, '0');
+    const mm = String(clockData.minutes).padStart(2, '0');
+
+    // Faqat soat ko'rinadi
+    el.textContent = `${hh}:${mm}`;
+
+    // Tooltip ichidagi to'liq ma'lumot
+    if (tip) {
+      const SEASON_UZ = { spring: 'Bahor 🌸', summer: 'Yoz ☀️', autumn: 'Kuz 🍂', winter: 'Qish ❄️' };
+      const seasonName = SEASON_UZ[clockData.season] || clockData.season || '—';
+
+      // O'yin yili: har 4 fasl = 1 yil, har fasl ~3 oy = 91 kun o'yin kuni
+      // 1 o'yin kuni = 24 real daqiqa
+      // Biror ma'noli yil: epoch dan kun soni asosida
+      const dayNum   = clockData.dayNumber ?? 0;
+      const gameYear = Math.floor(dayNum / 365) + 1;  // taxminan
+      const dayOfYear = (dayNum % 365) + 1;
+
+      // Kun holati (qayerda?)
+      const { isDay, isSunrise, isSunset, isNight, sunrise, sunset } = clockData;
+      let sunStatus;
+      if (isSunrise)     sunStatus = `🌅 Tong (${sunrise}:00 da chiqdi)`;
+      else if (isSunset) sunStatus = `🌇 Shom (${sunset}:00 da botadi)`;
+      else if (isDay)    sunStatus = `☀️ Kunduz`;
+      else               sunStatus = `🌙 Tun`;
+
+      // Kun progress bar (ASCII)
+      const progress = clockData.dayFraction; // 0..1
+      const BAR = 12;
+      const filled = Math.round(progress * BAR);
+      const bar = '█'.repeat(filled) + '░'.repeat(BAR - filled);
+
+      tip.innerHTML = `
+        <div style="color:#ffd97a;margin-bottom:4px;font-size:14px">📅 ${seasonName}</div>
+        <div>Yil: <b>${gameYear}</b> &nbsp;|&nbsp; Kun: <b>${dayNum}</b></div>
+        <div>Kun of yil: <b>${dayOfYear}</b></div>
+        <div>Soat: <b>${hh}:${mm}</b></div>
+        <div style="margin-top:4px">${sunStatus}</div>
+        <div style="margin-top:4px;color:#aaa;font-size:11px">[${bar}] ${Math.round(progress*100)}%</div>
+      `.trim();
+    }
+  }
     if (document.getElementById('damage-overlay')) return;
     const el = document.createElement('div');
     el.id = 'damage-overlay';

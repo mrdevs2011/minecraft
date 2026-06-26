@@ -354,30 +354,29 @@ export function pushChunkToCache(cx, cz, uint8data) {
 }
 
 // ─── Game Clock — O'yin vaqti tizimi ─────────────────────────────────────────
-//
-// Nisbat: 1 real soat = 1 o'yin daqiqasi
-//         24 real soat = 24 o'yin daqiqasi (to'liq bir kun)
-//         Boshqacha aytganda: 1 real sekund ≈ 1/60 o'yin daqiqasi
-//
-// O'yin vaqti real UTC dan hisoblangan "o'yin minutlari" orqali topiladi.
-// Har bir real sekund o'tganda o'yin soatida 1/3600 soat (ya'ni 1 sekunda ≈ 0.4 o'yin sekunda) o'tadi.
-// Aniqroq: gameSeconds = realSeconds * (1440 / 86400) = realSeconds / 60
-// Shunday qilib 24 real soat = 24 o'yin daqiqasi to'liq kunni beradi.
-//
-// Fasl (mavsim) haqiqiy UTC sanasiga qarab aniqlanadi:
-//   Bahor: mart–may    Yoz: iyun–avgust
-//   Kuz:   sentabr–noyabr   Qish: dekabr–fevral
-//
-// Har bir fasldagi quyosh chiqishi/botishi o'rtacha vaqti (o'yin vaqtida):
-//   Bahor:  chiqish 06:00,  botish 19:15
-//   Yoz:    chiqish 05:15,  botish 20:00
-//   Kuz:    chiqish 06:45,  botish 18:15
-//   Qish:   chiqish 07:30,  botish 17:30
+// Epoch Firestore da 'game/epoch' documentida saqlanadi — barcha clientlar bir xil
+// epoch ni ko'radi. Birinchi client epoch ni yozadi, qolganlar o'qiydi.
+// Epoch bir marta o'rnatilgach hech qachon o'zgarmaydi (reset qilmasdan).
 
 let _clockInterval = null;
+let _gameEpochMs   = null; // null = hali yuklanmagan
 
-// O'yin epoch: 1 Yanvar 2024 = Day 1
-const GAME_EPOCH_MS = new Date('2024-01-01T00:00:00Z').getTime();
+// Firestore dan epoch ni o'qib/yaratib, clock ni ishga tushiradi
+async function _initEpoch() {
+  try {
+    const epochRef  = doc(db, 'game', 'epoch');
+    const epochSnap = await getDoc(epochRef);
+    if (epochSnap.exists()) {
+      _gameEpochMs = epochSnap.data().startMs;
+    } else {
+      _gameEpochMs = Date.now();
+      await setDoc(epochRef, { startMs: _gameEpochMs });
+    }
+  } catch (err) {
+    console.warn('[Clock] Epoch o\'qishda xato, hozirgi vaqt ishlatiladi:', err.message);
+    _gameEpochMs = Date.now();
+  }
+}
 
 // Real UTC oy raqamiga (0–11) qarab fasl qaytaradi
 function _getSeason(utcMonth) {
@@ -403,16 +402,19 @@ function _hoursToDayFraction(hours) {
 
 export function listenForClock(callback) {
   function tick() {
+    // Epoch hali yuklanmagan bo'lsa — kutamiz
+    if (_gameEpochMs === null) return;
+
     const now = Date.now();
 
     // Real sekunddan o'yin sekundiga: nisbat 1/60 (1 real soat = 1 o'yin daqiqasi)
-    const realSeconds  = (now - GAME_EPOCH_MS) / 1000;
+    const realSeconds  = (now - _gameEpochMs) / 1000;
     const gameSeconds  = realSeconds / 60; // 1 real sekund = 1/60 o'yin daqiqasi
 
-    // O'yin kuni (1 dan boshlanadi): har 24 o'yin daqiqada yangi kun
+    // O'yin kuni (0 dan boshlanadi): har 24 o'yin daqiqada yangi kun
     // 24 o'yin daqiqasi = 24 * 60 = 1440 real sekund = 24 real daqiqa
     const GAME_DAY_REAL_SECONDS = 24 * 60; // 1440 real sekund = 1 o'yin kuni
-    const dayNumber = Math.floor(realSeconds / GAME_DAY_REAL_SECONDS) + 1;
+    const dayNumber = Math.floor(realSeconds / GAME_DAY_REAL_SECONDS); // 0 dan boshlanadi
 
     // O'yin soati: 0..24 oralig'ida
     const gameSecondsInDay = realSeconds % GAME_DAY_REAL_SECONDS;
@@ -478,7 +480,10 @@ export function listenForClock(callback) {
     });
   }
 
-  tick(); // darhol chaqir
+  // Epoch ni Firestore dan o'qib, keyin clock ni ishga tushir
+  _initEpoch().then(() => {
+    tick(); // epoch tayyor — darhol birinchi tick
+  });
   if (_clockInterval) clearInterval(_clockInterval);
   _clockInterval = setInterval(tick, 1000);
 
