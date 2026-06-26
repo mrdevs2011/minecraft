@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { SkeletonUtils } from 'three/addons/utils/SkeletonUtils.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  SheepModel — GLB model + kod orqali oyoq animatsiyasi
@@ -53,7 +54,7 @@ export class SheepModel {
     try {
       const gltf = await loadGLTF();
 
-      this._model = gltf.scene.clone(true);
+      this._model = SkeletonUtils.clone(gltf.scene);
       this._model.scale.setScalar(SHEEP_SCALE);
 
       // Pastki markaz hisoblash — oyoqlar yerda tursin

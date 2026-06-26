@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { SkeletonUtils } from 'three/addons/utils/SkeletonUtils.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  ZombieAvatar — GLB model + walk animatsiyasi
@@ -53,7 +54,7 @@ export class ZombieAvatar {
       const gltf = await loadGLTF();
 
       // GLB scene ni clone qilamiz — har zombi o'z nusxasiga ega bo'lsin
-      this._model = gltf.scene.clone(true);
+      this._model = SkeletonUtils.clone(gltf.scene);
       this._model.scale.setScalar(ZOMBIE_SCALE);
 
       // Modelni pastki markazga joylash (oyoqlar yerda tursin)
