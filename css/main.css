@@ -1,0 +1,12 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   css/main.css edi BO'SH (0 bayt) — shu sababli .hidden klassi umuman
+   mavjud emas edi va JS tomonidan qo'shilgan/olib tashlangan "hidden"
+   klassi hech qanday vizual ta'sir qilmayapti edi.
+
+   #server-off-screen elementi style="" ichida display:flex deb yozilgan,
+   shuning uchun u har doim ko'rinib turardi — server holatidan qat'i
+   nazar — chunki uni "yashirish" uchun .hidden qoidasi yo'q edi.
+   ────────────────────────────────────────────────────────────────────── */
+.hidden {
+  display: none !important;
+}
