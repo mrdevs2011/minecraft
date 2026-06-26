@@ -1,8 +1,150 @@
 import { getBlock } from '../world/Blocks.js';
+import * as THREE from 'three';
+import { buildTextureAtlas } from '../world/TextureAtlas.js';
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  HotbarRenderer — 9 ta slot uchun bitta shared Three.js renderer
+//  Har bir slot o'z <canvas> iga ega, lekin texture atlas ulashiladi
+// ─────────────────────────────────────────────────────────────────────────────
+class HotbarRenderer {
+  constructor() {
+    this._ready = false;
+    this._slots = []; // { canvas, scene, camera, cube }
+    this._atlas  = null;
+    this._getUV  = null;
+    this._renderer = null;
+    this._init();
+  }
+
+  _init() {
+    // Shared atlas
+    const atlas = buildTextureAtlas();
+    this._atlas = atlas.texture;
+    this._getUV = atlas.getUV;
+
+    // Shared WebGL renderer (offscreen, framebuffer orqali har slot ga render)
+    this._renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true });
+    this._renderer.setPixelRatio(1);
+    this._renderer.setClearColor(0x000000, 0);
+    this._renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    this._ready = true;
+  }
+
+  // Bir slot uchun scene + camera + cube yaratadi
+  _buildSlotScene(blockId) {
+    const scene  = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 100);
+    camera.position.set(1.6, 1.4, 2.2);
+    camera.lookAt(0, 0, 0);
+
+    // Ambient + yo'nalishli yorug'lik (top yuz yorqinroq)
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+    dirLight.position.set(1.5, 3, 2);
+    scene.add(dirLight);
+
+    const cube = this._makeCube(blockId);
+    if (cube) scene.add(cube);
+
+    return { scene, camera, cube };
+  }
+
+  // blockId bo'yicha atlas-textured kub yasash
+  _makeCube(blockId) {
+    if (!blockId || blockId === 0) return null;
+    const def = getBlock(blockId);
+    if (!def || !def.solid && def.name !== 'Water' && def.name !== 'Lava') {
+      // Suyuq yoki havo — oddiy rangdor kub
+    }
+
+    const faces = ['right', 'left', 'top', 'bottom', 'front', 'back'];
+    const faceNames = ['side', 'side', 'top', 'bottom', 'side', 'side'];
+
+    const materials = faces.map((_, i) => {
+      const [u0, v0, u1, v1] = this._getUV(blockId, faceNames[i]);
+      const mat = new THREE.MeshStandardMaterial({
+        map: this._atlas,
+        transparent: def.alpha !== undefined,
+        opacity: def.alpha ?? 1.0,
+      });
+      // UV offset + repeat uchun matga alohida atlasTexture reference
+      // (har material uchun alohida texture bo'lishi kerak — offset farqli)
+      const tex = this._atlas.clone();
+      tex.needsUpdate = false;
+      tex.offset.set(u0, 1 - v1);
+      tex.repeat.set(u1 - u0, v1 - v0);
+      mat.map = tex;
+      return mat;
+    });
+
+    const geo  = new THREE.BoxGeometry(1, 1, 1);
+    const mesh = new THREE.Mesh(geo, materials);
+    mesh.rotation.x = 0.4;
+    mesh.rotation.y = -Math.PI / 4;
+    return mesh;
+  }
+
+  // blockId o'zgarsa kubni yangilaymiz
+  _updateCubeMaterial(entry, blockId) {
+    if (entry.cube) {
+      entry.scene.remove(entry.cube);
+      entry.cube.geometry.dispose();
+      entry.cube.material.forEach(m => { m.map?.dispose(); m.dispose(); });
+      entry.cube = null;
+    }
+    if (blockId && blockId !== 0) {
+      entry.cube = this._makeCube(blockId);
+      if (entry.cube) entry.scene.add(entry.cube);
+    }
+  }
+
+  // canvas elementini tayyorlab, render qiladi
+  renderToCanvas(canvas, blockId) {
+    if (!this._ready) return;
+    const size = canvas.width;
+
+    this._renderer.setSize(size, size);
+
+    // Slot sahnasini topamiz (yoki yaratamiz)
+    let entry = canvas._slotEntry;
+    if (!entry) {
+      entry = this._buildSlotScene(blockId);
+      entry.lastBlockId = blockId;
+      canvas._slotEntry = entry;
+    } else if (entry.lastBlockId !== blockId) {
+      this._updateCubeMaterial(entry, blockId);
+      entry.lastBlockId = blockId;
+    }
+
+    if (!blockId || blockId === 0) {
+      const ctx2d = canvas.getContext('2d');
+      ctx2d.clearRect(0, 0, size, size);
+      return;
+    }
+
+    // Asl canvas ga rasm chizib, nusxa olish
+    this._renderer.render(entry.scene, entry.camera);
+    const ctx2d = canvas.getContext('2d');
+    ctx2d.clearRect(0, 0, size, size);
+    ctx2d.drawImage(this._renderer.domElement, 0, 0, size, size);
+  }
+
+  dispose() {
+    this._renderer.dispose();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  HUD
+// ─────────────────────────────────────────────────────────────────────────────
 export class HUD {
   constructor(player, user = null) {
     this.player = player;
+    this._hotbarRenderer = new HotbarRenderer();
+    this._slotCanvases   = [];  // 9 ta canvas
+    this._lastSlotIds    = new Array(9).fill(-999); // o'zgarish deteksiyasi
+
     this._buildHotbar();
     this._buildViewIndicator();
     this._initPlayerBadge(user || window._mcUser);
@@ -25,17 +167,37 @@ export class HUD {
   _buildHotbar() {
     const hotbar = document.getElementById('hotbar');
     hotbar.innerHTML = '';
+
     for (let i = 0; i < 9; i++) {
       const slot = document.createElement('div');
       slot.className = 'hotbar-slot' + (i === 0 ? ' active' : '');
       slot.id = `hotbar-slot-${i}`;
+      slot.style.cssText = 'position:relative;background:transparent;';
+
+      // 3D kub uchun canvas
+      const cvs = document.createElement('canvas');
+      const SIZE = 44;
+      cvs.width  = SIZE;
+      cvs.height = SIZE;
+      cvs.style.cssText = `
+        display:block;
+        width:${SIZE}px; height:${SIZE}px;
+        image-rendering:pixelated;
+      `;
+      slot.appendChild(cvs);
+      this._slotCanvases.push(cvs);
+
+      // Soni (count label)
+      const count = document.createElement('span');
+      count.className = 'count';
+      slot.appendChild(count);
+
       hotbar.appendChild(slot);
     }
   }
 
   _buildViewIndicator() {
     const debug = document.getElementById('debug-info');
-    // Add F5 hint below debug — created once
     if (!document.getElementById('view-hint')) {
       const hint = document.createElement('div');
       hint.id = 'view-hint';
@@ -46,26 +208,16 @@ export class HUD {
   }
 
   _buildClock() {
-    // Create clock element if not already in DOM
     if (document.getElementById('game-clock')) return;
     const clock = document.createElement('div');
     clock.id = 'game-clock';
     clock.style.cssText = [
-      'position:fixed',
-      'top:12px',
-      'right:16px',
-      'color:#fff',
-      'font-size:15px',
-      'font-family:monospace',
-      'font-weight:bold',
+      'position:fixed', 'top:12px', 'right:16px',
+      'color:#fff', 'font-size:15px', 'font-family:monospace', 'font-weight:bold',
       'text-shadow:0 0 4px #000, 0 1px 2px #000',
-      'background:rgba(0,0,0,0.35)',
-      'padding:3px 9px',
-      'border-radius:6px',
-      'letter-spacing:2px',
-      'z-index:9999',
-      'pointer-events:none',
-      'user-select:none',
+      'background:rgba(0,0,0,0.35)', 'padding:3px 9px',
+      'border-radius:6px', 'letter-spacing:2px',
+      'z-index:9999', 'pointer-events:none', 'user-select:none',
     ].join(';');
     clock.textContent = '00:00';
     document.body.appendChild(clock);
@@ -76,24 +228,18 @@ export class HUD {
     const el = document.createElement('div');
     el.id = 'damage-overlay';
     el.style.cssText = [
-      'position:fixed',
-      'top:0', 'left:0', 'width:100%', 'height:100%',
-      'background:rgba(255,0,0,0.35)',
-      'opacity:0',
-      'pointer-events:none',
-      'z-index:9998',
-      'transition:opacity 0.35s ease-out',
+      'position:fixed', 'top:0', 'left:0', 'width:100%', 'height:100%',
+      'background:rgba(255,0,0,0.35)', 'opacity:0',
+      'pointer-events:none', 'z-index:9998', 'transition:opacity 0.35s ease-out',
     ].join(';');
     document.body.appendChild(el);
   }
 
-  // Zarba olganda ekranni qisqa muddat qizil rangda chaqnatadi
   flashDamage() {
     const el = document.getElementById('damage-overlay');
     if (!el) return;
     el.style.transition = 'none';
     el.style.opacity = '1';
-    // Keyingi frame'da fade-out yoqamiz
     requestAnimationFrame(() => {
       el.style.transition = 'opacity 0.35s ease-out';
       el.style.opacity = '0';
@@ -105,37 +251,34 @@ export class HUD {
     if (!el) return;
     const m = Math.floor(totalSeconds / 60) % 60;
     const s = totalSeconds % 60;
-    el.textContent =
-      String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+    el.textContent = String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
   }
 
   update() {
     const p = this.player;
 
-    // Hotbar
+    // ── Hotbar — 3D kublar ──────────────────────────────────────────────────
     for (let i = 0; i < 9; i++) {
       const slot = document.getElementById(`hotbar-slot-${i}`);
       if (!slot) continue;
       slot.classList.toggle('active', i === p.hotbarSlot);
-      const item = p.inventory[i];
-      if (item) {
-        const def = getBlock(item.id);
-        slot.style.background = def.color?.top || '#555';
-        const count = slot.querySelector('.count') || (() => {
-          const c = document.createElement('span');
-          c.className = 'count';
-          slot.appendChild(c);
-          return c;
-        })();
-        count.textContent = item.count;
-      } else {
-        slot.style.background = 'rgba(0,0,0,0.5)';
-        const count = slot.querySelector('.count');
-        if (count) count.textContent = '';
+
+      const item   = p.inventory[i];
+      const blockId = item ? item.id : 0;
+
+      // Faqat o'zgargan slotlarni qayta render qilamiz
+      if (this._lastSlotIds[i] !== blockId) {
+        this._lastSlotIds[i] = blockId;
+        const cvs = this._slotCanvases[i];
+        if (cvs) this._hotbarRenderer.renderToCanvas(cvs, blockId);
       }
+
+      // Count label
+      const countEl = slot.querySelector('.count');
+      if (countEl) countEl.textContent = item ? item.count : '';
     }
 
-    // Health
+    // ── Health ──────────────────────────────────────────────────────────────
     const healthBar = document.getElementById('health-bar');
     healthBar.innerHTML = '';
     for (let i = 0; i < 10; i++) {
@@ -147,7 +290,7 @@ export class HUD {
       healthBar.appendChild(heart);
     }
 
-    // Hunger
+    // ── Hunger ──────────────────────────────────────────────────────────────
     const hungerBar = document.getElementById('hunger-bar');
     hungerBar.innerHTML = '';
     for (let i = 9; i >= 0; i--) {
@@ -159,7 +302,7 @@ export class HUD {
       hungerBar.appendChild(drumstick);
     }
 
-    // Debug
+    // ── Debug ───────────────────────────────────────────────────────────────
     const debug = document.getElementById('debug-info');
     debug.innerHTML = `
       X: ${p.x.toFixed(1)}  Y: ${p.y.toFixed(1)}  Z: ${p.z.toFixed(1)}<br>
