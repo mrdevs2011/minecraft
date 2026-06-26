@@ -51,6 +51,7 @@ export class Game {
     // Kun/tun vaqti: real UTC dan keladi (listenForClock orqali)
     this.gameTime     = 0;  // sekund (0..DAY_CYCLE)
     this._dayFraction = 0;  // 0..1 (0=yarim tun, 0.5=tush)
+    this._clockData   = null; // to'liq clock ma'lumoti (season, seasonT va h.k.)
   }
 
   start() {
@@ -201,6 +202,7 @@ export class Game {
     this._unsubscribeClock = listenForClock(clockData => {
       this.gameTime     = clockData.dayFraction * DAY_CYCLE; // 0..1440
       this._dayFraction = clockData.dayFraction;             // 0..1 (sun position)
+      this._clockData   = clockData;                         // fasl + qor uchun
       this.hud.updateClock(clockData);
     });
 
@@ -447,7 +449,7 @@ export class Game {
       ? this._raycastAtScreen(this._touchAimScreen.x, this._touchAimScreen.y)
       : this._raycast();
     const dayFraction = this._dayFraction;
-    this.renderer.render(this.player, hit, this._moving, this._dt, this.mobManager.mobs, dayFraction);
+    this.renderer.render(this.player, hit, this._moving, this._dt, this.mobManager.mobs, dayFraction, this._clockData);
     this.hud.update();
   }
 

@@ -1,7 +1,74 @@
 import * as THREE from 'three';
 import { CHUNK_SIZE, CHUNK_HEIGHT } from '../world/Chunk.js';
-import { getBlock, BLOCK_AIR, BLOCK_WATER, BLOCK_GLASS, BLOCK_LEAVES } from '../world/Blocks.js';
+import { getBlock, BLOCK_AIR, BLOCK_WATER, BLOCK_GLASS, BLOCK_LEAVES, BLOCK_WOOD, BLOCK_PLANKS } from '../world/Blocks.js';
 import { FLUID_MAX } from '../world/FluidSimulator.js';
+
+// ── Faslga qarab blok ranglari (smooth interpolatsiya uchun) ──────────────
+// Har bir fasl uchun LEAVES, WOOD (teri), PLANKS (taxtasi) ranglari
+// t=0..1 orali smooth lerp uchun ishlatiladi (Renderer dan uzatiladi)
+
+const SEASON_BLOCK_COLORS = {
+  spring: {
+    // Bahor: yam-yashil, nam/suvli ko'rinish
+    leaves:  { top: '#4dc43a', side: '#43b832', bottom: '#3aaa2a' },
+    wood:    { top: '#c8b87a', side: '#7a6a3a', bottom: '#c8b87a' }, // namlangan po'stloq
+    planks:  { top: '#d4bc82', side: '#d4bc82', bottom: '#d4bc82' }, // och, suvli taxtasi
+    grass:   { top: '#4db83a' },
+  },
+  summer: {
+    // Yoz: to'q yashil, quruq
+    leaves:  { top: '#2d7a1e', side: '#28701a', bottom: '#236016' },
+    wood:    { top: '#b8973a', side: '#6b4e1e', bottom: '#b8973a' }, // quruq po'stloq
+    planks:  { top: '#b89850', side: '#b89850', bottom: '#b89850' }, // qoraygan, quruq taxtasi
+    grass:   { top: '#4a9e30' },
+  },
+  autumn: {
+    // Kuz: sariq-qizil-to'q ranglar
+    leaves:  { top: '#d4721a', side: '#c4621a', bottom: '#b45218' }, // to'kilayotgan barg
+    wood:    { top: '#a07030', side: '#6a4820', bottom: '#a07030' }, // qoraygan po'stloq
+    planks:  { top: '#c09050', side: '#c09050', bottom: '#c09050' }, // kuz rangidagi taxtasi
+    grass:   { top: '#7a9a30' },
+  },
+  winter: {
+    // Qish: sovuq, kulrang-ko'kimtir
+    leaves:  { top: '#8ab4a0', side: '#7aa490', bottom: '#6a9480' }, // qoraygan, muzlagan
+    wood:    { top: '#908888', side: '#706060', bottom: '#908888' }, // muzlagan po'stloq
+    planks:  { top: '#a09898', side: '#a09898', bottom: '#a09898' }, // sovuq, oqargan taxtasi
+    grass:   { top: '#7a9a88' },
+  },
+};
+
+// t=0..1 orasida ikki hex rang orasida interpolatsiya
+function lerpHex(hexA, hexB, t) {
+  const a = hexToRgbRaw(hexA);
+  const b = hexToRgbRaw(hexB);
+  const r = Math.round(a[0] + (b[0] - a[0]) * t);
+  const g = Math.round(a[1] + (b[1] - a[1]) * t);
+  const bl = Math.round(a[2] + (b[2] - a[2]) * t);
+  return '#' + [r, g, bl].map(v => v.toString(16).padStart(2, '0')).join('');
+}
+
+function hexToRgbRaw(hex) {
+  const h = hex.replace('#', '');
+  return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
+}
+
+// Fasllar ketma-ketligi
+const SEASON_ORDER = ['spring', 'summer', 'autumn', 'winter'];
+
+// Berilgan season va t (0..1) asosida interpolatsiyalangan rang qaytaradi
+// t=0: shu faslning boshi, t=1: keyingi faslning boshi
+export function getSeasonColor(blockType, face, season, t) {
+  const idx  = SEASON_ORDER.indexOf(season);
+  const next = SEASON_ORDER[(idx + 1) % 4];
+  const cA   = SEASON_BLOCK_COLORS[season][blockType];
+  const cB   = SEASON_BLOCK_COLORS[next][blockType];
+  if (!cA || !cB) return null;
+  const hexA = cA[face] || cA.side;
+  const hexB = cB[face] || cB.side;
+  if (!hexA || !hexB) return null;
+  return lerpHex(hexA, hexB, t);
+}
 
 // Face definitions — dir, corners, face name, shade multiplier
 const FACES = [
@@ -209,7 +276,7 @@ function buildHeightMap(chunk) {
  * Qaytaradi: { opaqueGeom, glassGeom, waterGeom, boundingBox }
  *   boundingBox — THREE.Box3, Frustum Culling uchun ishlatiladi.
  */
-export function buildChunkMesh(chunk, world, fluid, getUV) {
+export function buildChunkMesh(chunk, world, fluid, getUV, season = 'summer', seasonT = 0) {
   const wx0 = chunk.worldX();
   const wz0 = chunk.worldZ();
 
@@ -263,9 +330,22 @@ export function buildChunkMesh(chunk, world, fluid, getUV) {
             if (shouldCull(id, neighborId)) continue;
           }
 
-          const colorHex = face.face === 'top'    ? (def.color.top    || def.color.side)
-                         : face.face === 'bottom' ? (def.color.bottom || def.color.side)
-                         : def.color.side;
+          // Faslga qarab rangni aniqlash
+          let colorHex;
+          if (id === BLOCK_LEAVES) {
+            colorHex = getSeasonColor('leaves', face.face, season, seasonT)
+                    || (face.face === 'top' ? def.color.top : face.face === 'bottom' ? def.color.bottom : def.color.side);
+          } else if (id === BLOCK_WOOD) {
+            colorHex = getSeasonColor('wood', face.face, season, seasonT)
+                    || (face.face === 'top' ? (def.color.top || def.color.side) : face.face === 'bottom' ? (def.color.bottom || def.color.side) : def.color.side);
+          } else if (id === BLOCK_PLANKS) {
+            colorHex = getSeasonColor('planks', face.face, season, seasonT)
+                    || def.color.side;
+          } else {
+            colorHex = face.face === 'top'    ? (def.color.top    || def.color.side)
+                     : face.face === 'bottom' ? (def.color.bottom || def.color.side)
+                     : def.color.side;
+          }
           if (!colorHex) continue;
 
           const [r, g, b] = hexToRgb(colorHex);

@@ -424,8 +424,24 @@ export function listenForClock(callback) {
 
     // Fasl (haqiqiy UTC sanasiga qarab)
     const realDate = new Date(now);
-    const season   = _getSeason(realDate.getUTCMonth());
+    const utcMonth = realDate.getUTCMonth();
+    const utcDay   = realDate.getUTCDate();
+    const season   = _getSeason(utcMonth);
     const { sunrise, sunset } = SEASON_TIMES[season];
+
+    // seasonT: fasl ichidagi pozitsiya 0..1 (smooth rang o'tishi uchun)
+    // Har bir fasl ~3 oy = ~91 kun
+    // Bahor: mart(2)–may(4), Yoz: iyun(5)–avg(7), Kuz: sen(8)–noy(10), Qish: dek(11)–fev(1)
+    const SEASON_MONTHS = {
+      spring: [2, 3, 4], summer: [5, 6, 7], autumn: [8, 9, 10], winter: [11, 0, 1],
+    };
+    const sMonths     = SEASON_MONTHS[season];
+    const monthInSeason = sMonths.indexOf(utcMonth === 0 && season === 'winter' ? 0
+                          : utcMonth === 1 && season === 'winter' ? 1 : utcMonth);
+    const daysInMonth   = new Date(realDate.getUTCFullYear(), utcMonth + 1, 0).getDate();
+    const seasonT       = Math.min(1, Math.max(0,
+      (monthInSeason * 30 + utcDay - 1) / 90
+    ));
 
     // dayFraction: 0 = yarim tun, 0.5 = tush
     const dayFraction = _hoursToDayFraction(gameHoursFloat);
@@ -450,6 +466,7 @@ export function listenForClock(callback) {
       dayFraction,
       totalSeconds: Math.floor(gameSeconds),
       season,
+      seasonT,
       sunrise,
       sunset,
       isDay,

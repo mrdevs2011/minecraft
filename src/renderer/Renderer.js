@@ -264,6 +264,19 @@ export class Renderer {
 
     this.chunkMeshes = new Map();
 
+    // ── Fasl holati ──────────────────────────────────────────────────────
+    this._season  = 'summer';
+    this._seasonT = 0;
+
+    // ── Qor yog'ish tizimi ───────────────────────────────────────────────
+    // Qishda 800 ta qor zarracha, player atrofida 40x40x30 blok maydonida
+    this._snowParticles    = null;
+    this._snowPositions    = null;
+    this._snowVelocities   = null;
+    this._snowActive       = false;
+    this._snowOpacity      = 0;      // 0..1 smooth fade
+    this._initSnow(player);
+
     // ── Block highlight ──
     const boxGeom = new THREE.BoxGeometry(1.002, 1.002, 1.002);
     const edges   = new THREE.EdgesGeometry(boxGeom);
@@ -295,6 +308,86 @@ export class Renderer {
     this.resize();
   }
 
+  // ── Qor zarrachalari tizimi ─────────────────────────────────────────────
+  _initSnow() {
+    const COUNT = 800;
+    const geom  = new THREE.BufferGeometry();
+    const pos   = new Float32Array(COUNT * 3);
+    // Boshlang'ich pozitsiya — player atrofida tasodifiy, birinchi update da to'g'rilanadi
+    for (let i = 0; i < COUNT; i++) {
+      pos[i * 3]     = (Math.random() - 0.5) * 40;
+      pos[i * 3 + 1] = Math.random() * 30;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * 40;
+    }
+    geom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({
+      color:       0xffffff,
+      size:        0.18,
+      transparent: true,
+      opacity:     0,
+      depthWrite:  false,
+      sizeAttenuation: true,
+    });
+    this._snowParticles  = new THREE.Points(geom, mat);
+    this._snowParticles.frustumCulled = false;
+    this._snowPositions  = pos;
+    // Har zarracha uchun tushish tezligi (tasodifiy 0.5..1.5 blok/s)
+    this._snowVelocities = new Float32Array(COUNT * 3);
+    for (let i = 0; i < COUNT; i++) {
+      this._snowVelocities[i * 3]     = (Math.random() - 0.5) * 0.3; // x drift
+      this._snowVelocities[i * 3 + 1] = -(0.5 + Math.random() * 1.0); // y tushish
+      this._snowVelocities[i * 3 + 2] = (Math.random() - 0.5) * 0.3; // z drift
+    }
+    this.scene.add(this._snowParticles);
+  }
+
+  _updateSnow(player, dt, season) {
+    if (!this._snowParticles) return;
+    const mat = this._snowParticles.material;
+
+    // Qish bo'lsa — opacity ni sekin oshir, aks holda kamayt
+    const targetOpacity = (season === 'winter') ? 0.82 : 0;
+    this._snowOpacity += (targetOpacity - this._snowOpacity) * Math.min(1, dt * 0.5);
+    mat.opacity = this._snowOpacity;
+
+    if (this._snowOpacity < 0.01) return; // Aktiv emas — zarrachalarni harakat qilma
+
+    const COUNT = this._snowPositions.length / 3;
+    const HALF_X = 20, HALF_Z = 20, HEIGHT = 28;
+    const pos = this._snowPositions;
+    const vel = this._snowVelocities;
+
+    for (let i = 0; i < COUNT; i++) {
+      const ix = i * 3, iy = ix + 1, iz = ix + 2;
+
+      // Harakat
+      pos[ix] += vel[ix] * dt;
+      pos[iy] += vel[iy] * dt;
+      pos[iz] += vel[iz] * dt;
+
+      // Player ga nisbatan offset (zarrachalar player bilan birga harakatlanadi)
+      const rx = pos[ix] - player.x;
+      const ry = pos[iy] - player.y;
+      const rz = pos[iz] - player.z;
+
+      // Maydon chegarasidan chiqsa — tepaga qaytarib tashlash (looping)
+      if (rx > HALF_X)        { pos[ix] -= HALF_X * 2; }
+      else if (rx < -HALF_X)  { pos[ix] += HALF_X * 2; }
+      if (rz > HALF_Z)        { pos[iz] -= HALF_Z * 2; }
+      else if (rz < -HALF_Z)  { pos[iz] += HALF_Z * 2; }
+      if (ry < -2) {
+        // Yerga tushdi — tepaga qaytarib ber, pozitsiyani player atrofida yangi joylash
+        pos[ix] = player.x + (Math.random() - 0.5) * HALF_X * 2;
+        pos[iy] = player.y + HEIGHT * (0.1 + Math.random() * 0.9);
+        pos[iz] = player.z + (Math.random() - 0.5) * HALF_Z * 2;
+        // Blok ustiga qo'ngan taassurot: biroz to'xtab turadi
+        vel[iy] = -(0.5 + Math.random() * 1.0);
+      }
+    }
+    // GPU ga yangilangan pozitsiyalarni yuklash
+    this._snowParticles.geometry.attributes.position.needsUpdate = true;
+  }
+
   resize() {
     const w = this.canvas.clientWidth  || this.canvas.offsetWidth;
     const h = this.canvas.clientHeight || this.canvas.offsetHeight;
@@ -317,7 +410,27 @@ export class Renderer {
     };
   }
 
-  render(player, raycastResult, moving, dt, mobs, dayFraction = 0.25) {
+  render(player, raycastResult, moving, dt, mobs, dayFraction = 0.25, clockData = null) {
+    // ── Fasl yangilash: season o'zgarganda chunk larni qayta qur ───────────
+    if (clockData) {
+      const newSeason = clockData.season || 'summer';
+      const newT      = clockData.seasonT || 0;
+      if (newSeason !== this._season || Math.abs((newT || 0) - (this._seasonT || 0)) > 0.02) {
+        const seasonChanged = newSeason !== this._season;
+        this._season  = newSeason;
+        this._seasonT = newT;
+        if (seasonChanged) {
+          // Barcha chunk meshlarini qayta qur — yangi rang bilan
+          for (const key of this.chunkMeshes.keys()) {
+            const [cx, cz] = key.split(',').map(Number);
+            const chunk = this.world.getChunk(cx, cz);
+            if (chunk) this._rebuildChunk(chunk);
+          }
+        }
+      }
+      // Qor tizimi: faqat qishda
+      this._updateSnow(player, dt || 0.016, newSeason);
+    }
     this._updateSteve(player, moving, dt || 0.016);
     this._syncCamera(player);
     this._updateChunks(player);
@@ -668,7 +781,8 @@ export class Renderer {
     }
 
     const { opaqueGeom, glassGeom, waterGeom, boundingBox } = buildChunkMesh(
-      chunk, this.world, this.world.fluid, this._getUV
+      chunk, this.world, this.world.fluid, this._getUV,
+      this._season || 'summer', this._seasonT || 0
     );
     const newEntry = {
       opaqueMesh: null,

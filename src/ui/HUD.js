@@ -1,6 +1,20 @@
-import { getBlock } from '../world/Blocks.js';
+import { getBlock, BLOCK_LEAVES, BLOCK_WOOD, BLOCK_PLANKS } from '../world/Blocks.js';
 import * as THREE from 'three';
 import { buildTextureAtlas } from '../world/TextureAtlas.js';
+
+// Faslga qarab blok nomini qaytaradi
+const SEASON_BLOCK_NAMES = {
+  leaves: { spring: 'Bahor barglari', summer: 'Barglar',    autumn: 'Kuz barglari', winter: 'Muzlagan barglar' },
+  wood:   { spring: 'Ho\'l eman po\'stlog\'i', summer: 'Quruq eman po\'stlog\'i', autumn: 'Kuz eman po\'stlog\'i', winter: 'Muzlagan eman po\'stlog\'i' },
+  planks: { spring: 'Nam eman taxtasi', summer: 'Quruq eman taxtasi', autumn: 'Kuz eman taxtasi', winter: 'Sovuq eman taxtasi' },
+};
+export function getSeasonBlockName(blockId, season) {
+  if (!season) return getBlock(blockId).name;
+  if (blockId === BLOCK_LEAVES) return SEASON_BLOCK_NAMES.leaves[season] || getBlock(blockId).name;
+  if (blockId === BLOCK_WOOD)   return SEASON_BLOCK_NAMES.wood[season]   || getBlock(blockId).name;
+  if (blockId === BLOCK_PLANKS) return SEASON_BLOCK_NAMES.planks[season] || getBlock(blockId).name;
+  return getBlock(blockId).name;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  HotbarRenderer — 9 ta slot uchun bitta shared Three.js renderer
@@ -148,6 +162,7 @@ export class HUD {
     this._hotbarRenderer = new HotbarRenderer();
     this._slotCanvases   = [];  // 9 ta canvas
     this._lastSlotIds    = new Array(9).fill(-999); // o'zgarish deteksiyasi
+    this._season         = 'summer'; // faslga qarab blok nomi uchun
 
     this._buildHotbar();
     this._buildViewIndicator();
@@ -251,6 +266,7 @@ export class HUD {
   }
 
   updateClock(clockData) {
+    if (clockData.season) this._season = clockData.season;
     const el = document.getElementById('game-clock');
     if (!el) return;
 
@@ -324,10 +340,11 @@ export class HUD {
 
     // ── Debug ───────────────────────────────────────────────────────────────
     const debug = document.getElementById('debug-info');
+    const selId = p.inventory[p.hotbarSlot]?.id || 0;
     debug.innerHTML = `
       X: ${p.x.toFixed(1)}  Y: ${p.y.toFixed(1)}  Z: ${p.z.toFixed(1)}<br>
       ${p.onGround ? '🟢 YER' : '🔵 HAVO'}<br>
-      Tanlangan: ${getBlock(p.inventory[p.hotbarSlot]?.id || 0).name}
+      Tanlangan: ${getSeasonBlockName(selId, this._season)}
     `;
   }
 }
