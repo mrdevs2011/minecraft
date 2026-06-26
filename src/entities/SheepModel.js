@@ -1,176 +1,182 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  SheepModel — to'liq THREE.js da qurilgan Minecraft qo'y modeli.
-//  Hech qanday .glb yuklanmaydi.
+// ─────────────────────────────────────────────────────────────────────────────
+//  SheepModel — GLB model + kod orqali oyoq animatsiyasi
 //
-//  Haqiqiy Minecraft qo'y o'lchamlari (1 blok = 1.0 unit):
-//    Tana (jun bilan) : 9×8×16 px → 0.5625 × 0.5 × 1.0 blok  (Y=0.5)
-//    Bosh             : 6×6×8  px → 0.375 × 0.375 × 0.5 blok
-//    Oyoq (4 ta)      : 4×12×4 px → 0.25 × 0.75 × 0.25 blok
-//    Jun qatlam (tana ustida biroz kattaroq)
-// ═══════════════════════════════════════════════════════════════════════════
+//  GLB fayl: models/sheep.glb  (loyiha ildizida models/ papkasi)
+//  Animatsiya yo'q — oyoqlar (leg1–leg4) va bosh kod orqali tebratiladi
+// ─────────────────────────────────────────────────────────────────────────────
 
-const PX = 1 / 16;
+const SHEEP_SCALE = 1.0;     // GLB model o'lchami (model allaqachon to'g'ri o'lchamda)
+const GLB_PATH    = 'models/sheep.glb';
 
-// Tana
-const B_W = 9 * PX, B_H = 8 * PX, B_D = 16 * PX;
-// Bosh
-const H_W = 6 * PX, H_H = 6 * PX, H_D = 8 * PX;
-// Oyoq
-const L_W = 4 * PX, L_H = 12 * PX, L_D = 4 * PX;
-// Jun qatlam (tana ustida)
-const J_W = B_W + 2 * PX, J_H = B_H + 2 * PX, J_D = B_D + 2 * PX;
+const loader = new GLTFLoader();
 
-// Rang
-const WOOL   = 0xe0e0e0;  // oq jun
-const SKIN   = 0x888070;  // qoʻy terisi (bosh, oyoqlar)
-const DARK   = 0x555045;  // yuz detallari
+// Bitta GLB ni barcha instance lar ulashadi (cache)
+let _gltfCache   = null;
+let _loadPromise = null;
 
-function mat(color) {
-  return new THREE.MeshLambertMaterial({ color });
-}
-function box(w, h, d, color) {
-  return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(color));
+function loadGLTF() {
+  if (_gltfCache)   return Promise.resolve(_gltfCache);
+  if (_loadPromise) return _loadPromise;
+  _loadPromise = new Promise((resolve, reject) => {
+    loader.load(
+      GLB_PATH,
+      gltf => { _gltfCache = gltf; resolve(gltf); },
+      undefined,
+      err  => { console.error('[SheepModel] GLB yuklanmadi:', err); reject(err); }
+    );
+  });
+  return _loadPromise;
 }
 
 export class SheepModel {
   constructor(scene) {
     this.scene      = scene;
-    this._time      = Math.random() * Math.PI * 2;
+    this._ready     = false;
+    this._time      = Math.random() * Math.PI * 2; // har qo'y boshqacha faza
     this._hurtFlash = false;
-    this._ready     = true;
+    this._moving    = false;
+
+    // Oyoq va bosh node lari (yuklangandan keyin to'ldiriladi)
+    this._legs = [];   // [{ node, sign }]  sign: +1 yoki -1 (qarama-qarshi juft)
+    this._head = null;
 
     this.root = new THREE.Group();
     scene.add(this.root);
-    this._build();
+
+    this._load();
   }
 
-  _build() {
-    // ── 4 ta oyoq ─────────────────────────────────────────────────────────
-    // Oyoq pivot: yuqori qirrasi (yerdan LEG_H balandda)
-    // oyoq mesh: pivot dan pastga osilib turadi
-    const legPositions = [
-      { x: -(B_W / 2 - L_W / 2), z: -(B_D / 2 - L_D / 2), sign:  1, name: 'fl' }, // old chap
-      { x:  (B_W / 2 - L_W / 2), z: -(B_D / 2 - L_D / 2), sign: -1, name: 'fr' }, // old o'ng
-      { x: -(B_W / 2 - L_W / 2), z:  (B_D / 2 - L_D / 2), sign: -1, name: 'bl' }, // orqa chap
-      { x:  (B_W / 2 - L_W / 2), z:  (B_D / 2 - L_D / 2), sign:  1, name: 'br' }, // orqa o'ng
-    ];
+  async _load() {
+    try {
+      const gltf = await loadGLTF();
 
-    this._legs = [];
-    for (const lp of legPositions) {
-      const grp = new THREE.Group();
-      const m = box(L_W, L_H, L_D, SKIN);
-      m.position.y = -L_H / 2;
-      // Tuyoq: pastki qismida biroz to'q
-      const hoof = box(L_W + PX, 2 * PX, L_D + PX, DARK);
-      hoof.position.y = -L_H + PX;
-      grp.add(m, hoof);
-      grp.position.set(lp.x, L_H, lp.z);
-      this.root.add(grp);
-      this._legs.push({ grp, sign: lp.sign });
+      this._model = SkeletonUtils.clone(gltf.scene);
+      this._model.scale.setScalar(SHEEP_SCALE);
+
+      // Pastki markaz hisoblash — oyoqlar yerda tursin
+      // Scale allaqachon model ichida qo'llanilgani uchun faqat box.min.y ni olamiz
+      const box = new THREE.Box3().setFromObject(this._model);
+      this._model.position.y = -box.min.y;
+
+      this.root.add(this._model);
+
+      // Oyoq va bosh nodelarini topamiz
+      // Node nomi 'leg1', 'leg2', 'leg3', 'leg4' va 'head' bilan boshlanadi
+      this._model.traverse(obj => {
+        const n = obj.name.toLowerCase();
+
+        if (n.startsWith('leg1_1') || n.startsWith('leg3_1')) {
+          // old chap + orqa o'ng — bitta guruh
+          this._legs.push({ node: obj, sign: +1 });
+        } else if (n.startsWith('leg2_1') || n.startsWith('leg4_1')) {
+          // old o'ng + orqa chap — qarama-qarshi
+          this._legs.push({ node: obj, sign: -1 });
+        } else if (n.startsWith('head_1')) {
+          this._head = obj;
+        }
+      });
+
+      // Asl rotatsiyalarni saqlab olamiz
+      this._legs.forEach(leg => {
+        leg._origX = leg.node.rotation.x;
+      });
+      if (this._head) {
+        this._head._origX = this._head.rotation.x;
+        this._head._origY = this._head.rotation.y;
+      }
+
+      this._ready = true;
+
+    } catch (e) {
+      console.warn('[SheepModel] Yuklanishda xatolik, fallback ishlatiladi');
+      this._buildFallback();
+      this._ready = true;
     }
-
-    // ── Tana (jun qatlam) ─────────────────────────────────────────────────
-    // Tana markazi: oyoq pivot dan B_H/2 yuqorida
-    const bodyY = L_H + B_H / 2;
-    this._body = box(J_W, J_H, J_D, WOOL);
-    this._body.position.set(0, bodyY, 0);
-    this.root.add(this._body);
-
-    // Tana teri qatlami (jun ostidan ozgina ko'rinib turadi)
-    const bodyBase = box(B_W, B_H, B_D, SKIN);
-    bodyBase.position.set(0, bodyY, 0);
-    this.root.add(bodyBase);
-
-    // ── Bosh ─────────────────────────────────────────────────────────────
-    // Bosh oldinda: tana oldi qirrasi + bosh yarmi oldinga chiqib turadi
-    const headZ = -(B_D / 2 + H_D * 0.3);  // oldinga chiqib turadi
-    const headY = L_H + B_H - H_H * 0.1;   // tana yuqori qirrasi hizasida
-
-    this._headGroup = new THREE.Group();
-    const headMesh = box(H_W, H_H, H_D, SKIN);
-    this._headGroup.add(headMesh);
-
-    // Ko'zlar
-    const eyeZ  = -(H_D / 2 + 0.001);
-    const eyeOX = H_W / 4;
-    const eyeY  = H_H / 6;
-    const mkEye = (ox) => {
-      const e = new THREE.Mesh(
-        new THREE.BoxGeometry(1.5 * PX, 1.5 * PX, 0.001),
-        mat(DARK)
-      );
-      e.position.set(ox, eyeY, eyeZ);
-      return e;
-    };
-    this._headGroup.add(mkEye(-eyeOX), mkEye(eyeOX));
-
-    // Burun (pastki qismida biroz qoramtir)
-    const nose = new THREE.Mesh(
-      new THREE.BoxGeometry(3 * PX, 2 * PX, 0.001),
-      mat(0x999080)
-    );
-    nose.position.set(0, -H_H / 3, eyeZ);
-    this._headGroup.add(nose);
-
-    this._headGroup.position.set(0, headY, headZ);
-    this.root.add(this._headGroup);
-
-    // Shovuq (yelim kabi o'simlik)
-    const hornL = box(PX, 3 * PX, PX, 0xccbb99);
-    hornL.position.set(-1.5 * PX, H_H / 2 + 1.5 * PX, 0);
-    const hornR = box(PX, 3 * PX, PX, 0xccbb99);
-    hornR.position.set( 1.5 * PX, H_H / 2 + 1.5 * PX, 0);
-    this._headGroup.add(hornL, hornR);
-
-    // hurt uchun materiallar ro'yxati
-    this._hurtMats = [];
-    this.root.traverse(obj => {
-      if (obj.isMesh && obj.material) this._hurtMats.push(obj.material);
-    });
   }
 
-  // ─── UPDATE ───────────────────────────────────────────────────────────────
+  // ── UPDATE ────────────────────────────────────────────────────────────────
   update(x, y, z, yaw, moving, dt) {
     this.root.position.set(x, y, z);
     this.root.rotation.y = yaw + Math.PI;
 
+    if (!this._ready) return;
+
+    this._moving = moving;
+
+    // Animatsiya timer
     if (moving) {
-      this._time += dt * 6;
+      this._time += dt * 7;
     } else {
-      if (Math.abs(Math.sin(this._time)) > 0.015) this._time += dt * 3;
+      // Sekin to'xtash — nol ga yaqinlashganda to'xtatamiz
+      if (Math.abs(Math.sin(this._time)) > 0.015) {
+        this._time += dt * 4;
+      }
     }
 
     const swing = moving
-      ? Math.sin(this._time) * 0.40
-      : Math.sin(this._time) * 0.06; // idle: ozgina sallanish
+      ? Math.sin(this._time) * 0.45
+      : Math.sin(this._time) * 0.08; // idle: ozgina sallanish
 
+    // Oyoqlarni tebratish
     for (const leg of this._legs) {
-      leg.grp.rotation.x = swing * leg.sign;
+      leg.node.rotation.x = (leg._origX || 0) + swing * leg.sign;
     }
 
-    // Bosh
-    if (this._headGroup) {
-      const bob = moving
+    // Bosh animatsiyasi — yurish paytida biroz tebranadi
+    if (this._head) {
+      const headBob = moving
         ? Math.sin(this._time * 2) * 0.04
-        : Math.sin(this._time * 0.9) * 0.02;
-      this._headGroup.rotation.x = bob - 0.15; // biroz pastga qaragan
+        : Math.sin(this._time * 0.8) * 0.02; // idle: sekin pastga-yuqoriga
+      this._head.rotation.x = (this._head._origX || 0) + headBob - 0.12;
+    }
+
+    // Hurt flash
+    if (this._hurtFlash) {
+      this._applyHurt(true);
+    } else {
+      this._applyHurt(false);
     }
   }
 
+  // ── Hurt flash ─────────────────────────────────────────────────────────────
   setHurt(isHurt) {
     if (this._hurtFlash === isHurt) return;
     this._hurtFlash = isHurt;
-    for (const m of this._hurtMats) {
-      if (isHurt) {
-        if (!m.userData._oc) m.userData._oc = m.color.getHex();
-        m.emissive?.set(0x661100);
+  }
+
+  _applyHurt(on) {
+    this.root.traverse(obj => {
+      if (!obj.isMesh || !obj.material) return;
+      if (on) {
+        if (!obj._origEmissive) obj._origEmissive = obj.material.emissive?.clone();
+        obj.material.emissive?.set(0x661100);
       } else {
-        m.emissive?.set(0x000000);
+        if (obj._origEmissive) obj.material.emissive?.copy(obj._origEmissive);
+        else obj.material.emissive?.set(0x000000);
       }
-      m.needsUpdate = true;
-    }
+      obj.material.needsUpdate = true;
+    });
+  }
+
+  // ── Fallback — GLB yuklanmasa ───────────────────────────────────────────
+  _buildFallback() {
+    const mat = c => new THREE.MeshLambertMaterial({ color: c });
+    const cube = (w, h, d, c, px, py, pz) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(c));
+      m.position.set(px, py, pz);
+      return m;
+    };
+    this.root.add(cube(0.70, 0.55, 1.00, 0xd0d0d0,  0, 0.65, 0));
+    this.root.add(cube(0.38, 0.34, 0.42, 0x888070,  0, 0.78, 0.45));
+    ['legFL','legFR','legBL','legBR'].forEach((name, i) => {
+      const xOff = i % 2 === 0 ? -0.22 : 0.22;
+      const zOff = i < 2 ? 0.30 : -0.30;
+      this.root.add(cube(0.20, 0.42, 0.20, 0x888888, xOff, 0.38, zOff));
+    });
   }
 
   setVisible(v) { this.root.visible = v; }
@@ -180,7 +186,9 @@ export class SheepModel {
     this.root.traverse(obj => {
       if (obj.isMesh) {
         obj.geometry?.dispose();
-        obj.material?.dispose();
+        Array.isArray(obj.material)
+          ? obj.material.forEach(m => m.dispose())
+          : obj.material?.dispose();
       }
     });
   }

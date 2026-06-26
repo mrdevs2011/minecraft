@@ -122,8 +122,7 @@ function _reconnectWebSocket() {
 }
 
 // ─── Avatar helpers ───────────────────────────────────────────────────────────
-// ProceduralAvatar ID lari — serverdan GLB yuklanmaydi
-const AVATAR_IDS = ['steve', 'alex', 'dream', 'notch', 'herobrine', 'creeper'];
+const AVATAR_IDS = ['steve', 'alex', 'ari', 'noor', 'makena', 'efe', 'zuri', 'kai'];
 function randomAvatarId() {
   return AVATAR_IDS[Math.floor(Math.random() * AVATAR_IDS.length)];
 }
@@ -168,43 +167,6 @@ export function listenForUserProfile(uid, callback) {
   return onSnapshot(doc(db, 'users', uid), snap => {
     if (snap.exists()) callback(snap.data());
   }, err => console.error('User profile listener error:', err));
-}
-
-// ─── Avatar (Firestore) ───────────────────────────────────────────────────────
-
-/**
- * Foydalanuvchining avatarId ni Firestore users/{uid} ga string ko'rinishida saqlaydi.
- * @param {string} uid
- * @param {string} avatarId  — 'steve' | 'alex' | 'dream' | 'notch'
- */
-export async function updateAvatarId(uid, avatarId) {
-  if (!uid || !avatarId) return;
-  try {
-    await setDoc(doc(db, 'users', uid), { avatarId }, { merge: true });
-    console.log('[Firebase] avatarId saqlandi:', avatarId);
-  } catch (err) {
-    console.error('[Firebase] avatarId saqlashda xato:', err);
-  }
-}
-
-/**
- * Firestore users/{uid} dan avatarId ni string ko'rinishida qaytaradi.
- * Agar mavjud bo'lmasa — null qaytaradi.
- * @param {string} uid
- * @returns {Promise<string|null>}
- */
-export async function getUserAvatarId(uid) {
-  if (!uid) return null;
-  try {
-    const snap = await getDoc(doc(db, 'users', uid));
-    if (snap.exists()) {
-      const avatarId = snap.data().avatarId;
-      return typeof avatarId === 'string' ? avatarId : null;
-    }
-  } catch (err) {
-    console.error('[Firebase] avatarId o\'qishda xato:', err);
-  }
-  return null;
 }
 
 // ─── Pozitsiya (MRLocal) ──────────────────────────────────────────────────────
@@ -577,10 +539,9 @@ export async function pushPlayerPosition(uid, displayName, x, y, z, yaw, moving,
       body: JSON.stringify({
         uid, displayName: displayName || 'Player',
         x, y, z, yaw,
-        moving:    !!moving,
-        avatarId:  avatarId || 'steve',
-        ghost:     !!ghost,
-        updatedAt: now,
+        moving:   !!moving,
+        avatarId: avatarId || 'steve',
+        ghost:    !!ghost,
       }),
     });
     _lastPushedPosition.set(uid, { x, y, z, yaw, moving: !!moving, avatarId, ghost: !!ghost, at: now });
@@ -606,9 +567,7 @@ export function listenForPlayers(myUid, callback) {
       const now  = Date.now();
       for (const p of Object.values(data)) {
         if (p.uid === myUid) continue;
-        // updatedAt server yoki client tomonidan yozilishi mumkin
-        // Agar updatedAt yo'q bo'lsa — hozirgi vaqtni ishlatamiz (filter qilinmasin)
-        const age = p.updatedAt ? now - p.updatedAt : 0;
+        const age = now - (p.updatedAt || 0);
         if (age > 60_000) continue;
         p.isGhost = !!p.ghost || age > 10_000;
         map.set(p.uid, p);

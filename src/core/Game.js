@@ -10,8 +10,7 @@ import { fetchAllBlockChanges, pushBlockChange, listenForBlockChanges,
          pushPlayerPosition, removePlayerDoc, listenForPlayers,
          listenForUserProfile, listenForClock, rotateCacheOnExit,
          saveUserInventory, loadUserInventory,
-         startPositionAutoSave, stopPositionAutoSave, loadLastPosition,
-         updateAvatarId, getUserAvatarId } from './Firebase.js';
+         startPositionAutoSave, stopPositionAutoSave, loadLastPosition } from './Firebase.js';
 import { InventoryScreen } from '../../inventoryScreen.js';
 import { getRandomAvatarId } from '../../avatars/index.js';
 
@@ -97,17 +96,6 @@ export class Game {
 
     // Firebase dan oxirgi pozitsiya va inventarni yuklash
     if (this.user) {
-      // Firestore dan saqlangan avatarId ni o'qib olamiz
-      getUserAvatarId(this.user.uid).then(savedAvatarId => {
-        if (savedAvatarId) {
-          this.avatarId = savedAvatarId;
-          this.renderer.setLocalAvatarId(this.avatarId);
-          console.log('[Avatar] Firestore dan yuklandi:', this.avatarId);
-        } else {
-          // Birinchi marta: random tanlangan avatarId ni Firestore ga yozamiz
-          updateAvatarId(this.user.uid, this.avatarId);
-        }
-      });
       loadLastPosition(this.user.uid).then(pos => {
         if (pos) {
           this.player.x   = pos.x;
@@ -165,10 +153,14 @@ export class Game {
 
     // ── Listen for other players ──────────────────────────────────────────
     if (this.user) {
-      // Boshqa o'yinchilar — multiplayer yoqilgan
-      this._unsubscribePlayers = listenForPlayers(this.user.uid, playersMap => {
-        this.renderer.syncOtherPlayers(playersMap);
-      });
+      // Realtime listener — o'z profilimiz o'zgarganda darhol qo'llanadi
+      // Avatar faqat Steve — profile dan o'qish kerak emas
+      // this._unsubscribeProfile = listenForUserProfile(...);
+
+      // Boshqa o'yinchilar ko'rsatilmaydi — multiplayer o'chirilgan
+      // this._unsubscribePlayers = listenForPlayers(this.user.uid, playersMap => {
+      //   this.renderer.syncOtherPlayers(playersMap);
+      // });
     }
 
     this.input.onEscape(() => this._togglePause());
@@ -220,16 +212,6 @@ export class Game {
     this.running   = true;
     this._lastTime = performance.now();
     this._loop();
-  }
-
-  // ── Avatar ID ni o'zgartirish — Firestore ga ham yoziladi ───────────────────
-  setAvatarId(avatarId) {
-    if (!avatarId || this.avatarId === avatarId) return;
-    this.avatarId = avatarId;
-    this.renderer.setLocalAvatarId(avatarId);
-    if (this.user) {
-      updateAvatarId(this.user.uid, avatarId);
-    }
   }
 
   _breakBlock(hit) {

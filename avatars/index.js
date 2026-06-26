@@ -1,30 +1,20 @@
-// avatars/index.js — Barcha avatarlar ProceduralAvatar orqali quriladi.
-// Serverdan hech qanday .glb fayl yuklanmaydi — faqat THREE.js geometriya.
-//
-// avatarId lar:
-//   'steve'     — ko'k ko'ylak, jigarrang teri
-//   'alex'      — yashil ko'ylak, slim qo'llar
-//   'dream'     — oq ko'ylak, oq shim, oq niqob
-//   'notch'     — yashil ko'ylak, soqol
-//   'herobrine' — kulrang ko'ylak, oq ko'zlar
-//   'creeper'   — yashil, creeper yuzi
+// avatars/index.js — Steve, Alex, Dream
+import { SteveAvatar } from './steve.js';
+import { AlexAvatar  } from './alex.js';
+import { DreamAvatar } from './dream.js';
 
-import { ProceduralAvatar } from './ProceduralAvatar.js';
+const AVATAR_IDS = ['steve', 'alex', 'dream'];
 
-export const AVATAR_IDS = ['steve', 'alex', 'dream', 'notch', 'herobrine', 'creeper'];
-
-/** Yangi hisob uchun tasodifiy avatarId */
+/** Yangi hisob uchun tasodifiy avatar */
 export function getRandomAvatarId() {
   return AVATAR_IDS[Math.floor(Math.random() * AVATAR_IDS.length)];
 }
 
-/** AvatarId bo'yicha ProceduralAvatar yaratish */
+/** Avatar yaratish */
 export function createAvatar(scene, avatarId) {
-  const id = AVATAR_IDS.includes(avatarId) ? avatarId : 'steve';
-  return new ProceduralAvatar(scene, id);
+  if (avatarId === 'alex')  return new AlexAvatar(scene);
+  if (avatarId === 'dream') return new DreamAvatar(scene);
+  return new SteveAvatar(scene);
 }
 
-// Orqaga moslik uchun — Renderer.js SteveAvatar import qiladi
-export class SteveAvatar extends ProceduralAvatar {
-  constructor(scene) { super(scene, 'steve'); }
-}
+export { SteveAvatar, AlexAvatar, DreamAvatar };

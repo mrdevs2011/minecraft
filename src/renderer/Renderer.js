@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { CHUNK_SIZE }    from '../world/Chunk.js';
 import { buildChunkMesh } from './ChunkMesher.js';
 import { createAvatar, SteveAvatar } from '../../avatars/index.js';
-// ProceduralAvatar — serverdan GLB yuklamaydi, pure THREE.js geometriya
 import { buildTextureAtlas } from '../world/TextureAtlas.js';
 import { ZombieAvatar } from '../entities/ZombieAvatar.js';
 import { SheepModel }   from '../entities/SheepModel.js';
@@ -555,75 +554,12 @@ export class Renderer {
     this.steve.setVisible(wasVisible);
   }
 
-  syncOtherPlayers(playersMap) {
-    // Map ni tick uchun saqlaymiz
-    this._lastPlayersMap = playersMap;
-    const activeUids = new Set(playersMap.keys());
-
-    // O'chirilganlarni dispose qilish
-    for (const [uid, entry] of this._otherPlayerModels) {
-      if (!activeUids.has(uid)) {
-        entry.model.dispose();
-        this._otherPlayerModels.delete(uid);
-      }
-    }
-
-    // Yangilarini yaratish (avatarId ga qarab to'g'ri model)
-    for (const [uid, pData] of playersMap) {
-      if (!this._otherPlayerModels.has(uid)) {
-        const avatarId = pData.avatarId || 'steve';
-        const model = createAvatar(this.scene, avatarId);
-        model.setVisible(true);
-        this._otherPlayerModels.set(uid, { model, avatarId });
-      } else {
-        // Avatar o'zgarganda modalni almashtiramiz
-        const entry = this._otherPlayerModels.get(uid);
-        const newAvatarId = pData.avatarId || 'steve';
-        if (entry.avatarId !== newAvatarId) {
-          entry.model.dispose();
-          const model = createAvatar(this.scene, newAvatarId);
-          model.setVisible(true);
-          // Pozitsiyani darhol qo'yamiz — bir frame "nolda" korinmasin
-          if (pData.x !== undefined) {
-            model.update(pData.x, pData.y, pData.z, pData.yaw || 0, false, 0);
-          }
-          this._otherPlayerModels.set(uid, { model, avatarId: newAvatarId });
-        }
-      }
-    }
+  syncOtherPlayers(_playersMap) {
+    // Boshqa o'yinchilar o'chirilgan — faqat local steve ko'rinadi
   }
 
-  _tickOtherPlayers(dt) {
-    for (const [uid, entry] of this._otherPlayerModels) {
-      const pData = this._lastPlayersMap?.get(uid);
-      if (!pData) continue;
-      const ghost = pData.isGhost || false;
-
-      // Model ni ko'rinuvchi qilamiz
-      entry.model.setVisible(true);
-
-      // Ghost: ProceduralAvatar.setGhost() ishlatamiz (u needsUpdate ni to'g'ri qiladi)
-      if (typeof entry.model.setGhost === 'function') {
-        entry.model.setGhost(ghost);
-      } else {
-        // Fallback: qo'lda traverse (material array ni ham qo'llab-quvvatlaydi)
-        const root = entry.model.root || entry.model.group;
-        if (root) {
-          root.traverse(obj => {
-            if (!obj.isMesh) return;
-            const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-            mats.forEach(m => {
-              if (!m) return;
-              m.transparent = ghost;
-              m.opacity = ghost ? 0.35 : 1.0;
-              m.needsUpdate = true;
-            });
-          });
-        }
-      }
-
-      entry.model.update(pData.x, pData.y, pData.z, pData.yaw, !!pData.moving, dt);
-    }
+  _tickOtherPlayers(_dt) {
+    // Boshqa o'yinchilar o'chirilgan
   }
 
   _updateSteve(player, moving, dt) {
