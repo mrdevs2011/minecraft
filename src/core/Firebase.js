@@ -361,6 +361,7 @@ export function pushChunkToCache(cx, cz, uint8data) {
 let _clockInterval  = null;
 let _gameSeconds    = null;  // null = hali yuklanmagan
 let _clockLoadedAt  = null;  // seconds qachon yuklanganligi (Date.now())
+let _clockSaveTimer = null;
 
 async function _initClock() {
   try {
@@ -420,7 +421,7 @@ export function listenForClock(callback) {
     const seconds = Math.floor(((gameHoursFloat - hours) * 60 - minutes) * 60);
 
     // Fasl (haqiqiy UTC sanasiga qarab)
-    const realDate = new Date(now);
+    const realDate = new Date();
     const utcMonth = realDate.getUTCMonth();
     const utcDay   = realDate.getUTCDate();
     const season   = _getSeason(utcMonth);
