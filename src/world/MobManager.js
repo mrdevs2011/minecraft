@@ -103,7 +103,43 @@ export class MobManager {
       if (mob.dead) continue;
       this._updateMob(mob, dt, player);
     }
+
+    // ── Mob-mob separation — bir-birining ichiga kirmasin ─────────────────
+    this._separateMobs();
+
     this.mobs = this.mobs.filter(m => !m.dead);
+  }
+
+  // Har ikkita mob orasidagi masofani tekshirib, juda yaqin bo'lsa itaramiz
+  _separateMobs() {
+    const MOB_RADIUS    = 0.4;
+    const MIN_DIST      = MOB_RADIUS * 2;
+    const PUSH_STRENGTH = 0.15;
+
+    for (let i = 0; i < this.mobs.length; i++) {
+      const a = this.mobs[i];
+      if (a.dead) continue;
+
+      for (let j = i + 1; j < this.mobs.length; j++) {
+        const b = this.mobs[j];
+        if (b.dead) continue;
+
+        const dx   = b.x - a.x;
+        const dz   = b.z - a.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+
+        if (dist < MIN_DIST && dist > 0.001) {
+          const push = (MIN_DIST - dist) * PUSH_STRENGTH;
+          const nx   = dx / dist;
+          const nz   = dz / dist;
+
+          a.x -= nx * push;
+          a.z -= nz * push;
+          b.x += nx * push;
+          b.z += nz * push;
+        }
+      }
+    }
   }
 
   _updateMob(mob, dt, player) {
@@ -256,7 +292,7 @@ export class MobManager {
     const newZ = mob.z + (nz * speed + mob._kbZ) * dt;
 
     const mobH = 1.8;
-    const mobR = 0.3;
+    const mobR = 0.4;  // kattaroq radius — blok ichiga kirmasin
 
     const canX = !this._isSolid(newX, mob.y, mob.z, mobR, mobH);
     const canZ = !this._isSolid(mob.x, mob.y, newZ, mobR, mobH);
@@ -281,7 +317,7 @@ export class MobManager {
     mob.vy += GRAVITY * dt;
     const newY = mob.y + mob.vy * dt;
 
-    const mobR = 0.3;
+    const mobR = 0.4;  // blok ichiga kirmasin
     const solidBelow = this._isSolid(mob.x, newY - 0.05, mob.z, mobR, 0.1);
 
     if (solidBelow && mob.vy <= 0) {
