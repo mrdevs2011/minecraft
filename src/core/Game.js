@@ -57,7 +57,7 @@ export class Game {
   start() {
     this.world     = new World();
     this.player    = new Player(this.world);
-    this.renderer  = new Renderer(this.canvas, this.world);
+    this.renderer  = new Renderer(this.canvas, this.world, this.player);
     this.input     = new InputHandler(this.canvas);
     this.raycaster = new Raycaster(this.world);
     this.hud       = new HUD(this.player, this.user);

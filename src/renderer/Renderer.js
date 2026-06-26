@@ -156,9 +156,10 @@ function makeFogUniforms(color, near, far) {
 }
 
 export class Renderer {
-  constructor(canvas, world) {
-    this.canvas = canvas;
-    this.world  = world;
+  constructor(canvas, world, player) {
+    this.canvas  = canvas;
+    this.world   = world;
+    this.player  = player;
 
     // ── Scene ──
     this.scene = new THREE.Scene();

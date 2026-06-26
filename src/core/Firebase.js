@@ -354,80 +354,62 @@ export function pushChunkToCache(cx, cz, uint8data) {
 }
 
 // ─── Game Clock — O'yin vaqti tizimi ─────────────────────────────────────────
-// Epoch MRLocal serverda saqlanadi (/mc/epoch endpoint).
-// Firestore ga birorta so'rov yuborilmaydi — limit tugamaydi.
-// Birinchi o'yinchi epoch ni yaratadi, qolganlar o'sha epochni oladi.
-// Epoch = o'yin Kun 0 ning real vaqtdagi ms qiymati.
+// Vaqt MRLocal serverda saqlanadi (/mc/clock endpoint).
+// { seconds } formatida — o'yin sekundlari saqlanadi.
+// Firebase ga birorta so'rov yuborilmaydi.
 
-let _clockInterval = null;
-let _gameEpochMs   = null; // null = hali yuklanmagan
+let _clockInterval  = null;
+let _gameSeconds    = null;  // null = hali yuklanmagan
+let _clockLoadedAt  = null;  // seconds qachon yuklanganligi (Date.now())
 
-async function _initEpoch() {
+async function _initClock() {
   try {
-    // MRLocal dan epoch ni o'qishga urinib ko'r
-    const res = await fetch(`${_mrLocalUrl}/mc/epoch`);
+    const res = await fetch(`${_mrLocalUrl}/mc/clock`);
     if (res.ok) {
       const data = await res.json();
-      if (data && data.startMs) {
-        _gameEpochMs = data.startMs;
-        return;
-      }
+      _gameSeconds   = data.seconds ?? 0;
+      _clockLoadedAt = Date.now();
+      return;
     }
-    // Endpoint yo'q yoki epoch hali yaratilmagan — biz yaratamiz
-    _gameEpochMs = Date.now();
-    await fetch(`${_mrLocalUrl}/mc/epoch`, {
+  } catch (err) {
+    console.warn('[Clock] MRLocal dan vaqt olinmadi, 0 dan boshlanadi:', err.message);
+  }
+  _gameSeconds   = 0;
+  _clockLoadedAt = Date.now();
+}
+
+async function _saveClock() {
+  if (_gameSeconds === null || _clockLoadedAt === null) return;
+  const elapsed = (Date.now() - _clockLoadedAt) / 1000;
+  const seconds = Math.floor(_gameSeconds + elapsed);
+  try {
+    await fetch(`${_mrLocalUrl}/mc/clock`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ startMs: _gameEpochMs }),
+      body: JSON.stringify({ seconds }),
     });
   } catch (err) {
-    // MRLocal ishlamayapti — hozirgi vaqtni fallback sifatida ishlatamiz
-    console.warn('[Clock] Epoch serverdan olinmadi, lokal vaqt ishlatiladi:', err.message);
-    _gameEpochMs = Date.now();
+    console.warn('[Clock] Vaqtni saqlashda xato:', err.message);
   }
-}
-
-// Real UTC oy raqamiga (0–11) qarab fasl qaytaradi
-function _getSeason(utcMonth) {
-  if (utcMonth >= 2 && utcMonth <= 4) return 'spring';  // mart–may
-  if (utcMonth >= 5 && utcMonth <= 7) return 'summer';  // iyun–avgust
-  if (utcMonth >= 8 && utcMonth <= 10) return 'autumn'; // sentabr–noyabr
-  return 'winter';                                        // dekabr–fevral
-}
-
-// Har bir fasl uchun quyosh chiqishi va botish vaqti (o'yin soatlarida, onli son)
-const SEASON_TIMES = {
-  spring: { sunrise: 6.00,  sunset: 19.25 },  // 06:00 / 19:15
-  summer: { sunrise: 5.25,  sunset: 20.00 },  // 05:15 / 20:00
-  autumn: { sunrise: 6.75,  sunset: 18.25 },  // 06:45 / 18:15
-  winter: { sunrise: 7.50,  sunset: 17.50 },  // 07:30 / 17:30
-};
-
-// O'yin soatini 0..1 (dayFraction) formatiga o'tkazadi
-// 0.0 = yarim tun (00:00), 0.5 = tush (12:00), 1.0 = yana yarim tun
-function _hoursToDayFraction(hours) {
-  return hours / 24;
 }
 
 export function listenForClock(callback) {
   function tick() {
-    // Epoch hali yuklanmagan bo'lsa — kutamiz
-    if (_gameEpochMs === null) return;
+    // Clock hali yuklanmagan bo'lsa — kutamiz
+    if (_gameSeconds === null || _clockLoadedAt === null) return;
 
-    const now = Date.now();
+    // Yuklanganidan beri o'tgan vaqtni qo'shamiz
+    const elapsed    = (Date.now() - _clockLoadedAt) / 1000;
+    const totalSecs  = _gameSeconds + elapsed;
 
-    // Real sekunddan o'yin sekundiga: nisbat 1/60 (1 real soat = 1 o'yin daqiqasi)
-    const realSeconds  = (now - _gameEpochMs) / 1000;
-    const gameSeconds  = realSeconds / 60; // 1 real sekund = 1/60 o'yin daqiqasi
+    // O'yin kuni: har 1440 sekund = 1 kun
+    const GAME_DAY_REAL_SECONDS = 24 * 60;
+    const dayNumber = Math.floor(totalSecs / GAME_DAY_REAL_SECONDS);
 
-    // O'yin kuni (0 dan boshlanadi): har 24 o'yin daqiqada yangi kun
-    // 24 o'yin daqiqasi = 24 * 60 = 1440 real sekund = 24 real daqiqa
-    const GAME_DAY_REAL_SECONDS = 24 * 60; // 1440 real sekund = 1 o'yin kuni
-    const dayNumber = Math.floor(realSeconds / GAME_DAY_REAL_SECONDS); // 0 dan boshlanadi
-
-    // O'yin soati: 0..24 oralig'ida
-    const gameSecondsInDay = realSeconds % GAME_DAY_REAL_SECONDS;
+    // O'yin soati: 0..24
+    const gameSecondsInDay = totalSecs % GAME_DAY_REAL_SECONDS;
     const gameHoursFloat   = (gameSecondsInDay / GAME_DAY_REAL_SECONDS) * 24;
+    const gameSeconds      = totalSecs / 60;
 
     const hours   = Math.floor(gameHoursFloat);
     const minutes = Math.floor((gameHoursFloat - hours) * 60);
@@ -489,15 +471,20 @@ export function listenForClock(callback) {
     });
   }
 
-  // Epoch ni Firestore dan o'qib, keyin clock ni ishga tushir
-  _initEpoch().then(() => {
-    tick(); // epoch tayyor — darhol birinchi tick
+  // MRLocal dan vaqtni o'qib, keyin clock ni ishga tushir
+  _initClock().then(() => {
+    tick(); // tayyor — darhol birinchi tick
   });
   if (_clockInterval) clearInterval(_clockInterval);
   _clockInterval = setInterval(tick, 1000);
 
+  // Har 30 soniyada MRLocal ga saqlash
+  if (_clockSaveTimer) clearInterval(_clockSaveTimer);
+  _clockSaveTimer = setInterval(_saveClock, 30_000);
+
   return () => {
-    if (_clockInterval) { clearInterval(_clockInterval); _clockInterval = null; }
+    if (_clockInterval)  { clearInterval(_clockInterval);  _clockInterval  = null; }
+    if (_clockSaveTimer) { clearInterval(_clockSaveTimer); _clockSaveTimer = null; }
   };
 }
 
