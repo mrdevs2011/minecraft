@@ -169,6 +169,43 @@ export function listenForUserProfile(uid, callback) {
   }, err => console.error('User profile listener error:', err));
 }
 
+// ─── Avatar (Firestore) ───────────────────────────────────────────────────────
+
+/**
+ * Foydalanuvchining avatarId ni Firestore users/{uid} ga string ko'rinishida saqlaydi.
+ * @param {string} uid
+ * @param {string} avatarId  — 'steve' | 'alex' | 'dream' | 'notch'
+ */
+export async function updateAvatarId(uid, avatarId) {
+  if (!uid || !avatarId) return;
+  try {
+    await setDoc(doc(db, 'users', uid), { avatarId }, { merge: true });
+    console.log('[Firebase] avatarId saqlandi:', avatarId);
+  } catch (err) {
+    console.error('[Firebase] avatarId saqlashda xato:', err);
+  }
+}
+
+/**
+ * Firestore users/{uid} dan avatarId ni string ko'rinishida qaytaradi.
+ * Agar mavjud bo'lmasa — null qaytaradi.
+ * @param {string} uid
+ * @returns {Promise<string|null>}
+ */
+export async function getUserAvatarId(uid) {
+  if (!uid) return null;
+  try {
+    const snap = await getDoc(doc(db, 'users', uid));
+    if (snap.exists()) {
+      const avatarId = snap.data().avatarId;
+      return typeof avatarId === 'string' ? avatarId : null;
+    }
+  } catch (err) {
+    console.error('[Firebase] avatarId o\'qishda xato:', err);
+  }
+  return null;
+}
+
 // ─── Pozitsiya (MRLocal) ──────────────────────────────────────────────────────
 
 let _posAutoSaveTimer = null;
