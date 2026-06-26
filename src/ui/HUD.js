@@ -322,6 +322,8 @@ export class HUD {
       `.trim();
     }
   }
+
+  initDamageOverlay() {
     if (document.getElementById('damage-overlay')) return;
     const el = document.createElement('div');
     el.id = 'damage-overlay';
