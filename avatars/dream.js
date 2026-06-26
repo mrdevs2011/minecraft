@@ -96,11 +96,11 @@ export class DreamAvatar {
 
       // Asl rotatsiyalarni saqlaymiz
       this._origRot = {
-        armL:  this._armL?.rotation.clone()  ?? new THREE.Euler(),
-        armR:  this._armR?.rotation.clone()  ?? new THREE.Euler(),
-        legL:  this._legL?.rotation.clone()  ?? new THREE.Euler(),
-        legR:  this._legR?.rotation.clone()  ?? new THREE.Euler(),
-        headY: this._head?.position.y        ?? 0,
+        armL:    this._armL ? this._armL.rotation.clone() : new THREE.Euler(),
+        armR:    this._armR ? this._armR.rotation.clone() : new THREE.Euler(),
+        legL:    this._legL ? this._legL.rotation.clone() : new THREE.Euler(),
+        legR:    this._legR ? this._legR.rotation.clone() : new THREE.Euler(),
+        headPos: this._head ? this._head.position.clone() : new THREE.Vector3(),
       };
 
       this._ready = true;
@@ -123,7 +123,7 @@ export class DreamAvatar {
     if (moving) {
       this._time += dt * 9;
     } else {
-      if (Math.abs(Math.sin(this._time)) > 0.02) this._time += dt * 6;
+      if (Math.abs(Math.sin(this._time)) > 0.02) this._time += dt * 9;
     }
 
     const swing = moving ? Math.sin(this._time) * 0.65 : 0;
@@ -138,7 +138,7 @@ export class DreamAvatar {
 
     if (this._head) {
       const bobY = moving ? Math.abs(Math.sin(this._time * 2)) * 0.018 : 0;
-      this._head.position.y = this._origRot.headY + bobY;
+      this._head.position.y = this._origRot.headPos.y + bobY;
     }
 
     if (this._torso) this._torso.rotation.x = moving ? 0.03 : 0;
@@ -186,9 +186,11 @@ export class DreamAvatar {
     this.root.add(this._head, this._torso, this._armR, this._armL, this._legR, this._legL);
 
     this._origRot = {
-      armL: new THREE.Euler(), armR: new THREE.Euler(),
-      legL: new THREE.Euler(), legR: new THREE.Euler(),
-      headY: 1.55,
+      armL:    new THREE.Euler(),
+      armR:    new THREE.Euler(),
+      legL:    new THREE.Euler(),
+      legR:    new THREE.Euler(),
+      headPos: new THREE.Vector3(0, 1.55, 0),
     };
   }
 

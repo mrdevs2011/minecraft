@@ -6,17 +6,22 @@ import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 //  SteveAvatar — steve.glb (blocky player model)
 //
 //  steve.glb raw height: 2.0 units → scale 0.9 → 1.8 blok (Minecraft standard)
+//  2 blok baland, 1 blok keng
 //
-//  Node xaritasi:
-//    Cube_0     (bosh)
-//    Cube.001_1 (tana)
-//    Cube.003_2 (o'ng qo'l)
-//    Cube.004_3 (chap qo'l)
-//    Cube.006_4 (o'ng oyoq)
-//    Cube.005_5 (chap oyoq)
+//  Node xaritasi (GLB da parent wrapper → child mesh):
+//    Cube_0     → Object_4   (bosh)
+//    Cube.001_1 → Object_6   (tana)
+//    Cube.003_2 → Object_8   (o'ng qo'l)
+//    Cube.004_3 → Object_10  (chap qo'l)
+//    Cube.006_4 → Object_12  (o'ng oyoq)
+//    Cube.005_5 → Object_14  (chap oyoq)
+//
+//  Animatsiya uchun PARENT wrapper larga rotatsiya beramiz —
+//  child mesh ular bilan birga aylanadi.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Steve GLB raw height = 2.0 → scale 0.9 = 1.8 blok (to'g'ri Minecraft o'lchami)
+// GLB raw: balandlik = 2.0 birlik, kenglik (tana) = 1.0 birlik
+// scale 0.9 → 1.8 blok baland, 0.9 blok keng ≈ Minecraft proporsiya
 const STEVE_SCALE = 0.9;
 const GLB_PATH    = 'models/steve.glb';
 
@@ -45,6 +50,7 @@ export class SteveAvatar {
     this._time    = 0;
     this._isGhost = false;
 
+    // Parent wrapper node lar (rotatsiya shu larga beriladi)
     this._head  = null;
     this._torso = null;
     this._armR  = null;
@@ -72,25 +78,43 @@ export class SteveAvatar {
 
       this.root.add(this._model);
 
-      // Node larni topamiz (steve.glb node nomlari)
+      // Node larni topamiz — parent wrapper larga rotatsiya beramiz
+      // Agar parent topilmasa child mesh ni ham qabul qilamiz (fallback)
       this._model.traverse(obj => {
         switch (obj.name) {
-          case 'Cube_0':     this._head  = obj; break;  // bosh
-          case 'Cube.001_1': this._torso = obj; break;  // tana
-          case 'Cube.003_2': this._armR  = obj; break;  // o'ng qo'l
-          case 'Cube.004_3': this._armL  = obj; break;  // chap qo'l
-          case 'Cube.006_4': this._legR  = obj; break;  // o'ng oyoq
-          case 'Cube.005_5': this._legL  = obj; break;  // chap oyoq
+          // Parent wrapper lar (animatsiya uchun)
+          case 'Cube_0':     this._head  = obj; break;
+          case 'Cube.001_1': this._torso = obj; break;
+          case 'Cube.003_2': this._armR  = obj; break;
+          case 'Cube.004_3': this._armL  = obj; break;
+          case 'Cube.006_4': this._legR  = obj; break;
+          case 'Cube.005_5': this._legL  = obj; break;
+          // Fallback: agar parent topilmasa, child mesh larni ishlatamiz
+          case 'Object_4':   if (!this._head)  this._head  = obj; break;
+          case 'Object_6':   if (!this._torso) this._torso = obj; break;
+          case 'Object_8':   if (!this._armR)  this._armR  = obj; break;
+          case 'Object_10':  if (!this._armL)  this._armL  = obj; break;
+          case 'Object_12':  if (!this._legR)  this._legR  = obj; break;
+          case 'Object_14':  if (!this._legL)  this._legL  = obj; break;
         }
       });
 
-      // Asl rotatsiyalarni saqlaymiz
+      console.log('[SteveAvatar] Topilgan node lar:', {
+        head:  this._head?.name,
+        torso: this._torso?.name,
+        armR:  this._armR?.name,
+        armL:  this._armL?.name,
+        legR:  this._legR?.name,
+        legL:  this._legL?.name,
+      });
+
+      // Asl rotatsiya va pozitsiyalarni saqlaymiz
       this._origRot = {
-        armL:  this._armL?.rotation.clone()  ?? new THREE.Euler(),
-        armR:  this._armR?.rotation.clone()  ?? new THREE.Euler(),
-        legL:  this._legL?.rotation.clone()  ?? new THREE.Euler(),
-        legR:  this._legR?.rotation.clone()  ?? new THREE.Euler(),
-        headY: this._head?.position.y        ?? 0,
+        armL:  this._armL  ? this._armL.rotation.clone()  : new THREE.Euler(),
+        armR:  this._armR  ? this._armR.rotation.clone()  : new THREE.Euler(),
+        legL:  this._legL  ? this._legL.rotation.clone()  : new THREE.Euler(),
+        legR:  this._legR  ? this._legR.rotation.clone()  : new THREE.Euler(),
+        headPos: this._head ? this._head.position.clone() : new THREE.Vector3(),
       };
 
       this._ready = true;
@@ -103,40 +127,49 @@ export class SteveAvatar {
     }
   }
 
-  // ── UPDATE ────────────────────────────────────────────────────────────────
+  // ── UPDATE (har frame chaqiriladi) ───────────────────────────────────────
   update(x, y, z, yaw, moving, dt) {
     this.root.position.set(x, y, z);
     this.root.rotation.y = yaw + Math.PI;
 
     if (!this._ready) return;
 
+    // Vaqt hisoblagichi — yurayotganda tez, to'xtayotganda sekin to'xtaydi
     if (moving) {
       this._time += dt * 9;
     } else {
-      if (Math.abs(Math.sin(this._time)) > 0.02) this._time += dt * 6;
+      // Animatsiya "natural" to'xtashi uchun — nolga yaqinlashganda sekinlashadi
+      if (Math.abs(Math.sin(this._time)) > 0.02) {
+        this._time += dt * 9; // bir xil tezlik — cycle tugashiga qadar
+      }
     }
 
+    // Qo'l va oyoq swing amplitudasi
     const swing = moving ? Math.sin(this._time) * 0.65 : 0;
 
+    // O'ng qo'l va chap oyoq bir yo'nalishda, chap qo'l va o'ng oyoq teskari
     if (this._armR) this._armR.rotation.x = this._origRot.armR.x + swing;
     if (this._armL) this._armL.rotation.x = this._origRot.armL.x - swing;
     if (this._legR) this._legR.rotation.x = this._origRot.legR.x - swing;
     if (this._legL) this._legL.rotation.x = this._origRot.legL.x + swing;
 
+    // Qo'llar yurganda biroz tashqariga chiqadi
     if (this._armR) this._armR.rotation.z = moving ? -0.05 : 0;
     if (this._armL) this._armL.rotation.z = moving ?  0.05 : 0;
 
+    // Bosh yuqori-pastga "bob" effekti
     if (this._head) {
       const bobY = moving ? Math.abs(Math.sin(this._time * 2)) * 0.018 : 0;
-      this._head.position.y = this._origRot.headY + bobY;
+      this._head.position.y = this._origRot.headPos.y + bobY;
     }
 
+    // Tana yurganda ozgina oldinga egiladi
     if (this._torso) this._torso.rotation.x = moving ? 0.03 : 0;
   }
 
   setVisible(v) { this.root.visible = v; }
 
-  // ── Ghost mode ────────────────────────────────────────────────────────────
+  // ── Ghost mode (shaffof ko'rinish) ───────────────────────────────────────
   setGhost(isGhost) {
     if (this._isGhost === !!isGhost) return;
     this._isGhost = !!isGhost;
@@ -156,13 +189,13 @@ export class SteveAvatar {
         mat.opacity = 0.35;
       } else {
         mat.transparent = orig.transparent;
-        mat.opacity = orig.opacity;
+        mat.opacity     = orig.opacity;
       }
       mat.needsUpdate = true;
     });
   }
 
-  // ── Fallback ──────────────────────────────────────────────────────────────
+  // ── Fallback — GLB yuklanmasa oddiy kubl modelini yaratamiz ─────────────
   _buildFallback() {
     const mat  = c => new THREE.MeshLambertMaterial({ color: c });
     const cube = (w, h, d, c, px, py, pz) => {
@@ -171,6 +204,7 @@ export class SteveAvatar {
       return m;
     };
 
+    // O'lchamlar: balandlik = 1.8 blok (2 blok), kenglik = 0.6 blok (1 blok)
     this._head  = cube(0.50, 0.50, 0.50, 0xc78c58,   0,      1.55, 0);
     this._torso = cube(0.50, 0.60, 0.26, 0x3ab8c8,   0,      1.00, 0);
     this._armR  = cube(0.26, 0.58, 0.22, 0x3ab8c8,  -0.38,   1.00, 0);
@@ -181,9 +215,11 @@ export class SteveAvatar {
     this.root.add(this._head, this._torso, this._armR, this._armL, this._legR, this._legL);
 
     this._origRot = {
-      armL: new THREE.Euler(), armR: new THREE.Euler(),
-      legL: new THREE.Euler(), legR: new THREE.Euler(),
-      headY: 1.55,
+      armL:    new THREE.Euler(),
+      armR:    new THREE.Euler(),
+      legL:    new THREE.Euler(),
+      legR:    new THREE.Euler(),
+      headPos: new THREE.Vector3(0, 1.55, 0),
     };
   }
 

@@ -117,7 +117,7 @@ export class NotchAvatar {
     if (moving) {
       this._time += dt * 9;
     } else {
-      if (Math.abs(Math.sin(this._time)) > 0.02) this._time += dt * 6;
+      if (Math.abs(Math.sin(this._time)) > 0.02) this._time += dt * 9;
     }
 
     // Idle: model yuqori-pastga biroz sakrab turadi (bob)

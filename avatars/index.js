@@ -13,10 +13,12 @@ export function getRandomAvatarId() {
 
 /** Avatar yaratish */
 export function createAvatar(scene, avatarId) {
-  if (avatarId === 'alex')  return new AlexAvatar(scene);
-  if (avatarId === 'dream') return new DreamAvatar(scene);
-  if (avatarId === 'notch') return new NotchAvatar(scene);
-  return new SteveAvatar(scene);   // default: steve
+  switch (avatarId) {
+    case 'alex':  return new AlexAvatar(scene);
+    case 'dream': return new DreamAvatar(scene);
+    case 'notch': return new NotchAvatar(scene);
+    default:      return new SteveAvatar(scene);
+  }
 }
 
 export { SteveAvatar, AlexAvatar, DreamAvatar, NotchAvatar };
