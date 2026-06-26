@@ -398,6 +398,25 @@ async function _saveClock() {
   }
 }
 
+// Real UTC oy raqamiga (0-11) qarab fasl qaytaradi
+function _getSeason(utcMonth) {
+  if (utcMonth >= 2 && utcMonth <= 4) return 'spring';
+  if (utcMonth >= 5 && utcMonth <= 7) return 'summer';
+  if (utcMonth >= 8 && utcMonth <= 10) return 'autumn';
+  return 'winter';
+}
+
+const SEASON_TIMES = {
+  spring: { sunrise: 6.00,  sunset: 19.25 },
+  summer: { sunrise: 5.25,  sunset: 20.00 },
+  autumn: { sunrise: 6.75,  sunset: 18.25 },
+  winter: { sunrise: 7.50,  sunset: 17.50 },
+};
+
+function _hoursToDayFraction(hours) {
+  return hours / 24;
+}
+
 export function listenForClock(callback) {
   function tick() {
     // Clock hali yuklanmagan bo'lsa — kutamiz
